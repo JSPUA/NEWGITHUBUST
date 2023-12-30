@@ -1,0 +1,117 @@
+/* @tailwind base;
+@tailwind components;
+@tailwind utilities; */
+.profile-photo-container {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: 20px;
+     /* Add padding to create some spacing from the top and right edges */
+    /* Optional: Add a background color for the container */
+     /* Optional: Apply a shadow effect */
+  }
+
+  .profile-photo-content {
+    position: relative;
+    text-align: center;
+    
+  }
+  
+
+  .magnifier-icon {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+  }
+
+  .blue-icon {
+    color: blue;
+   
+  }
+
+  .black-icon {
+    color: lightsalmon;
+   
+  }
+
+  .brown-icon {
+    color: black;
+   
+  }
+  
+  .red-icon {
+    color: red;
+  }
+  
+  .icon-large {
+    font-size: 1.5rem; /* Adjust the size as needed */
+  }
+
+  .transparent-button {
+    background-color: transparent;
+    border: none; /* To remove the button border */
+    padding: 0; /* To remove any extra padding */
+    color: red; /* You can set the text color to red or any other color you prefer */
+    cursor: pointer;
+  }
+  .card-icons {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-end;
+    margin: 10px;
+  }
+  
+  /* table, th, td {
+    border: 1px solid;
+  } */
+
+  .custom-modal {
+    width: 90%; /* Adjust the width as needed (e.g., 80% of the viewport width) */
+    max-width: 900px; /* Set a maximum width for larger screens */
+    max-height: 90%; /* Adjust the max height as needed (e.g., 80% of the viewport height) */
+    margin: 0 auto; /* Center the modal horizontally */
+  }
+
+  .due-badge {
+    background-color: yellow;
+    color: black;
+  }
+  
+  .active-badge {
+    background-color: green;
+    color: white;
+  }
+  
+  .expired-badge {
+    background-color: red;
+    color: white;
+  }
+
+  .custom-dropdown {
+    right: 95px; /* Adjust this value as needed */
+  }
+  
+  @font-face {
+    font-family: 'ds';
+    src: url(../public/DS-DIGIT.ttf);
+  }
+
+  .ds{
+    font-family: ds;
+  }
+
+  .inline-block {
+    display: inline-block;
+    vertical-align: middle; /* Align elements vertically in the middle */
+  }
+
+  /* Add some spacing between elements */
+  .spacer {
+    margin-right: 10px;
+  }
+
+  /* Add some margin between block and label */
+  .block-label {
+    margin-left: 5px;
+  }
+ 

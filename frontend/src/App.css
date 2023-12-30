@@ -1,0 +1,15 @@
+.custom-carousel-item img {
+    width: 300px; /* Set your desired width */
+    height: 200px; /* Set your desired height */
+    object-fit: cover; /* Preserve the image aspect ratio and cover the entire space */
+  }
+
+  @font-face {
+    font-family: 'ds';
+    src: url(../public/DS-DIGIT.ttf);
+  }
+
+  .ds{
+    font-family: ds;
+  }
+ 
