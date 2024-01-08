@@ -24,28 +24,15 @@ import User from "./models/userModel.js"
 import cookieParser from "cookie-parser";
 import session from "express-session";
 import util from 'util';
+import StentLog from "./models/stentLog.js";
+import replaceStentModel from "./models/replaceStentModel.js";
 import twilio from 'twilio';
-const client = twilio('AC507c629296d96052f42a054cbdc59593', '34fa1c1069508097be99a2a839fc6391');
 
-// function sendSMS(res){
-//   client.messages
-//   .create({
-//     body: 'Your stent is expired today. Please go back to meet with the doctor',
-//     from: "+12058830221",
-//     to: "+601116235068", // Assuming 'mobile' is defined somewhere in your code
-//   })
-//   .then((message) => {
-//     console.log(message.sid);
-//     res.status(200).json({ message: " Stent Expired message sent successfully" });
-//   })
-//   .catch((error) => {
-//     console.error(error);
-//     res.status(500).json({ message: "Error sending stent expired message" });
-//   });
-//   }
+const client = twilio('AC507c629296d96052f42a054cbdc59593', 'bc13e1664804591cc671a68b4cf7a752');
 
-  
 
+//Basic express, nodeJs setup
+//=================================================================================
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -65,36 +52,143 @@ app.use(
     })
   );
 
-  // app.post('/sendSMS', (req, res) => {
-  //   try {
-  //     sendSMS(res);
-  //   } catch (error) {
-  //     console.error(error);
-  //     res.status(500).json({ message: "Error sending stent expired message" });
-  //   }
-  // });
 
-  function sendSMS() {
+  app.listen(PORT, () => {
+    console.log(`App is listening to port: ${PORT}`);
+   //setInterval( checkStentsAndSendNotificationss,1000);
+    cron.schedule('* * * * *', checkStentsAndSendEmails);
+   
+     cron.schedule('27 18 * * *', checkStentsAndSendNotificationss);
+    //  cron.schedule('* * * * *', sendPush);
+     
+     cron.schedule('48 19 * * *', async () => {
+      try {
+        const result = await sendSMS();
+        console.log('Stent expiration message sent. Result:', result);
+      } catch (error) {
+        console.error('Error sending stent expired message. Error:', error);
+      }
+  
+  
+    });
+  
+    cron.schedule('0 8 * * *', async () => {
+      const patientId = '...'; // Set the patient's ID or use another identifier
+      try {
+        await sendSMS(patientId);
+        console.log('Stent expiration messages sent.');
+      } catch (error) {
+        console.error('Error sending stent expiration messages:', error);
+      }
+    });
+  
+    cron.schedule('* * * * *', async () => {
+      try {
+         const result = await checkStentsAndSendSMS();
+        console.log( result);
+      } catch (error) {
+        console.error('Error sending stent expired message. Error:', error);
+      }
+    });
+  
+    // cron.schedule('* * * * *', deleteUnreferencedImages);
+    
+  }); 
+//========================================================================================================
+
+ //change date format 
+function formatDate(isoDate) {
+  if (!isoDate) {
+    return '';
+  }
+  const date = new Date(isoDate);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+//=================================================================================
+//sendSMS 
+//==================================================================================================================
+  function sendSMS(toNumber, messageBody) {
     return new Promise((resolve, reject) => {
       client.messages
         .create({
-          body: 'Your stent is expired today. Please go back to meet with the doctor',
+          body: messageBody,
           from: "+12058830221",
-          to: "+601116235068", // Assuming 'mobile' is defined somewhere in your code
+          to: toNumber,
         })
         .then((message) => {
-          console.log(message.sid);
-          resolve("Stent Expired message sent successfully");
+          console.log(`Message sent to ${toNumber}: ${message.sid}`);
+          resolve(`Message sent successfully to ${toNumber}`);
         })
         .catch((error) => {
-          console.error(error);
-          reject("Error sending stent expired message");
+          console.error(`Error sending message to ${toNumber}:`, error);
+          reject(`Error sending message to ${toNumber}`);
         });
     });
   }
+
+//sendSMS and check status of stent
+  const checkStentsAndSendSMS = async () => {
+    try {
+      const patients = await Patient.find({ 'stentData': { $exists: true, $not: { $size: 0 } } });
+      
+      for (const patient of patients) {
+        console.log(`Checking stents for patient: ${patient.firstName} ${patient.surname}`);
+        for (let stent of patient.stentData) {
+          console.log(`Checking stent with ID: ${stent.caseId}`);
+          const dueDate = calculateDueDate2(stent.insertedDate, stent.dueDate);
+          const status = getStentStatus(stent.insertedDate,new Date(), new Date(dueDate));
+          const timeDiff = new Date(dueDate).getTime() - new Date().getTime();
+          const daysLeft = Math.ceil(timeDiff / (1000 * 3600 * 24));
   
-  // Express route
-  app.post('/sendSMS', async (req, res) => {
+          // ... your existing logic for email notifications
+  
+          // Check and send SMS notifications
+if(stent.smsnotificationSent.fourteenDayWarning||stent.smsnotificationSent.expired){
+  console.log("SMS already sent for this stent, skipping...");
+  continue; // Skip to the next stent
+}
+
+
+          if ((status === "due" && !stent.smsnotificationSent.fourteenDayWarning) ||
+              (status === "expired" && !stent.smsnotificationSent.expired)) {
+            
+                const patientMessage = status === "due" 
+                ? 'Your stent will be due in 2 weeks soon.' 
+                : 'Your stent is expired, please visit the hospital to replace or take out stent.';
+        
+            // Message content for next of kin
+            const nextOfKinMessage = status === "due" 
+                ? 'Your relative\'s stent will be due in 2 weeks soon.'
+                : 'Your relative\'s stent is expired, please visit the hospital to replace or take out stent.';
+  
+            // Send SMS to patient and their next of kin
+            await sendSMS(patient.mobileNo, patientMessage);
+            await sendSMS(patient.nextOfKin.mobileNo, nextOfKinMessage);
+  
+            // Update SMS notification sent status
+            if (status === "due") {
+              stent.smsnotificationSent.fourteenDayWarning = true;
+            } else if (status==="expired") {
+              stent.smsnotificationSent.expired = true;
+            }
+            await patient.save(); // Save the patient with updated stent data
+          }
+  
+          // ... your existing logging logic
+        }
+      }
+    } catch (err) {
+      console.error('Error in checkStentsAndSendNotifications:', err);
+    }
+  };
+
+//sendSMS
+app.post('/sendSMS', async (req, res) => {
     try {
       const result = await sendSMS();
       res.status(200).json({ message: result });
@@ -104,126 +198,42 @@ app.use(
     }
   });
 
-
-  async function getPatientPhoneNumbers(patientId) {
-    try {
-      const patient = await Patient.findById(patientId);
-      if (!patient) {
-        throw new Error('Patient not found');
-      }
+//======================================================================================================================
   
-      const patientMobileNo = patient.mobileNo;
-      const nextOfKinMobileNo = patient.nextOfKin ? patient.nextOfKin.mobileNo : null;
-  
-      return { patientMobileNo, nextOfKinMobileNo };
-    } catch (error) {
-      console.error('Error getting patient phone numbers:', error);
-      throw error;
-    }
-  }
-
-  async function sendMessage(patientId) {
-    try {
-      const { patientMobileNo, nextOfKinMobileNo } = await getPatientPhoneNumbers(patientId);
-  
-      if (patientMobileNo) {
-        // Send SMS to patient
-        await client.messages.create({
-          body: 'Your stent is expired today. Please go back to meet with the doctor',
-          from: '+12058830221', // Replace with your Twilio phone number
-          to: patientMobileNo,
-        });
-        console.log('SMS sent to patient:', patientMobileNo);
-      }
-  
-      if (nextOfKinMobileNo) {
-        // Send SMS to next of kin
-        await client.messages.create({
-          body: 'Your relative\'s stent is expired today. Please check on them.',
-          from: '+12058830221', // Replace with your Twilio phone number
-          to: nextOfKinMobileNo,
-        });
-        console.log('SMS sent to next of kin:', nextOfKinMobileNo);
-      }
-    } catch (error) {
-      console.error('Error sending SMS:', error);
-      throw error;
-    }
-  }
-
-  app.post('/sendMessage/:patientId', async (req, res) => {
-    const patientId = req.params.patientId;
-  
-    try {
-      await sendMessage(patientId);
-      res.status(200).json({ message: 'Stent expiration messages sent successfully' });
-    } catch (error) {
-      console.log(error);
-      res.status(500).json({ message: 'Error sending stent expiration messages' });
-    }
-  });
-  
-  // Cron schedule
-  cron.schedule('52 0 * * *', async () => {
-    try {
-      // const result = await sendSMS();
-      console.log('Stent expiration message sent. Result:', result);
-    } catch (error) {
-      console.error('Error sending stent expired message. Error:', error);
-    }
-  });
-
-
+//testing
+//=================================================================================
+//for trying
 app.get("/", (request, response) => {
   console.log(request);
   return response.status(234).send("Welcome To MERN Stack Tutorial");
 });
 
-app.listen(PORT, () => {
-  console.log(`App is listening to port: ${PORT}`);
- //setInterval( checkStentsAndSendNotificationss,1000);
-  cron.schedule('25 5 * * *', checkStentsAndSendEmails);
- 
-   cron.schedule('25 5 * * *', checkStentsAndSendNotificationss);
-   
-   cron.schedule('00 1 * * *', async () => {
-    try {
-      const result = await sendSMS();
-      console.log('Stent expiration message sent. Result:', result);
-    } catch (error) {
-      console.error('Error sending stent expired message. Error:', error);
-    }
-  });
-
-  cron.schedule('0 8 * * *', async () => {
-    const patientId = '...'; // Set the patient's ID or use another identifier
-    try {
-      await sendSMS(patientId);
-      console.log('Stent expiration messages sent.');
-    } catch (error) {
-      console.error('Error sending stent expiration messages:', error);
-    }
-  });
-
-  // cron.schedule('* * * * *', deleteUnreferencedImages);
-  
-});
 
 
-app.use("/books", booksRoute);
+//for refer
+//app.use("/books", booksRoute);
 
+//==========================================================================
+//for storing application picture and pdf  
+//==========================================================================
 const imagesDirectory = path.join(__dirname, "../frontend/public/images");
 const pdfDirectory = path.join(__dirname, '../frontend/public/pdf');
 const imagesDirectory2 = path.join(__dirname, "../frontend/public/images");
 const pdfDirectory2 = path.join(__dirname, '../frontend/public/pdf');
 
+
+//for storing application picture and pdf 
 if (!fs.existsSync(imagesDirectory)) {
   fs.mkdirSync(imagesDirectory, { recursive: true });
 }
 
+
+//for storing application picture and pdf 
 if (!fs.existsSync(pdfDirectory)) {
   fs.mkdirSync(pdfDirectory, { recursive: true });
 }
+
+//for storing application picture and pdf 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, imagesDirectory);
@@ -234,8 +244,10 @@ const storage = multer.diskStorage({
   },
 });
 
+//for storing application picture and pdf 
 const upload = multer({ storage: storage });
 
+//for storing application picture and pdf 
 const listFilesInDirectory = async (dir) => {
   try {
     const files = await fs.readdir(dir);
@@ -279,9 +291,8 @@ const deleteUnreferencedImages = async () => {
 };
 
 
-// Schedule the cleanup task to run every day at midnight
 
-
+//pdf storage code
 const pdfStorage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, pdfDirectory);
@@ -319,6 +330,10 @@ const pictureEditStorage = multer.diskStorage({
 const editPDF = multer({ storage: pdfEditStorage });
 const editPicture = multer({ storage: pictureEditStorage });
 
+
+
+
+//delete the picture in the localfile when delete user/application
 app.post("/delete",(req,res)=>{
 console.log(req.body._id);
 User.findByIdAndRemove(req.body._id,(err,data)=>{
@@ -329,7 +344,7 @@ User.findByIdAndRemove(req.body._id,(err,data)=>{
 res.json({success:true});
 });
 
-
+//upload the user application to database and store in local file 400-443
 app.post("/upload-image", upload.fields([{ name: "image", maxCount: 1 }, { name: "imageSecond", maxCount: 1 }]), async (req, res) => {
   const {
     username,
@@ -373,6 +388,7 @@ app.post("/upload-image", upload.fields([{ name: "image", maxCount: 1 }, { name:
     res.status(400).send({ message: err.message });
   }
 });
+
 
 app.post('/pdf-upload', uploadPDF.fields([
   { name: 'pdfFile', maxCount: 1 },
@@ -433,46 +449,6 @@ app.get('/pdf-upload/:id', async (req, res) => {
   }
 });
 
-
-// app.put('/pdf-upload/:id', uploadPDF.fields([
-//   { name: 'pdfFile', maxCount: 1 },
-//   { name: 'title', maxCount: 1 },
-//   { name: 'picture', maxCount: 1 },
-//   { name: 'description', maxCount: 1 },
-// ]), async (req, res) => {
-//   try {
-//     const pdfId = req.params.id; // Extract the PDF ID from the route parameter
-//     const pdfFile = req.files && req.files['pdfFile'] && req.files['pdfFile'][0] && req.files['pdfFile'][0].filename;
-//     const picture = req.files && req.files['picture'] && req.files['picture'][0] && req.files['picture'][0].filename;
-//     const { title, description } = req.body;
-
-//     // Check if pdfFile and picture are defined before using them
-//     if (!pdfFile || !picture) {
-//       return res.status(400).json({ message: 'Missing PDF file or picture' });
-//     }
-
-//     // Find the PDF by ID
-//     const existingPdf = await PDFUpload.findById(pdfId);
-
-//     if (!existingPdf) {
-//       return res.status(404).json({ message: 'PDF not found' });
-//     }
-
-//     // Update the fields of the existing PDF
-//     existingPdf.pdfFileName = pdfFile;
-//     existingPdf.title = title;
-//     existingPdf.picture = picture;
-//     existingPdf.description = description;
-
-//     // Save the updated PDF
-//     const updatedPdf = await existingPdf.save();
-
-//     res.json({ message: 'PDF updated successfully', updatedPdf });
-//   } catch (err) {
-//     console.error(err.message);
-//     res.status(500).json({ message: 'Server Error' });
-//   }
-// });
 app.put('/pdf-upload/:id', uploadPDF.fields([
   { name: 'pdfFile', maxCount: 1 },
   { name: 'picture', maxCount: 1 },
@@ -514,25 +490,6 @@ app.put('/pdf-upload/:id', uploadPDF.fields([
   }
 });
 
-
-
-
-
-// app.delete('/pdf-upload/:id', async (req, res) => {
-//   try {
-//     const pdfUploadData = await PDFUpload.findByIdAndDelete(req.params.id);
-
-//     if (!pdfUploadData) {
-//       return res.status(404).json({ message: 'PDF not found' });
-//     }
-
-//     res.json({ message: 'PDF deleted successfully' });
-//   } catch (err) {
-//     console.error(err.message);
-//     res.status(500).json({ message: 'Server Error' });
-//   }
-// });
-
 app.delete('/pdf-upload/:id', async (req, res) => {
   try {
     const pdfId = req.params.id;
@@ -561,6 +518,9 @@ app.delete('/pdf-upload/:id', async (req, res) => {
     res.status(500).json({ message: 'Server Error' });
   }
 });
+
+
+
 
 app.get("/get-image", async (req, res) => {
   try {
@@ -634,6 +594,27 @@ app.delete("/get-image/:id", async (req, res) => {
   }
 });
 
+app.get("/application/:hospitalName", async (req, res) => {
+  try {
+    const hospitalName = req.params.hospitalName;
+
+    // Find all patients with the specified hospitalName
+    const applications = await Images.find({ 'hospitalName': hospitalName });
+
+    res.json({ applications: applications });
+  } catch (error) {
+    console.error("Error fetching application:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+
+//===========================================================================================================================================
+
+//for add,update,delete user
+
+//===========================================================================================
+
 app.post('/addUser/:id', async (req, res) => {
   const applicationId = req.params.id;
 
@@ -673,7 +654,305 @@ app.post('/addUser/:id', async (req, res) => {
   }
 });
 
-//patient profile
+
+app.delete("/user/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    if (user.image) {
+      const imagePath = path.join(imagesDirectory, user.image);
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+      }
+    }
+
+    if (user.imageSecond) {
+      const imageSecondPath = path.join(imagesDirectory, user.imageSecond);
+      if (fs.existsSync(imageSecondPath)) {
+        fs.unlinkSync(imageSecondPath);
+      }
+    }
+    await User.findByIdAndDelete(id);
+    return res.status(200).send({ message: "User deleted successfully" });
+  } catch (error) {
+    console.log(error.message);
+    res.status(500).send({ message: error.message });
+  }
+});
+
+
+app.put("/user/:id", upload.fields([
+  {name: 'image',maxCount: 1},
+  {name: 'imageSecond',maxCount: 1},
+]), async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const updateData = req.body;
+    //const image = req.files && req.files['image'] && req.files['image'][0] && req.files['image'][0].filename;
+    //const imageSecond = req.files && req.files['imageSecond'] && req.files['imageSecond'][0] && req.files['imageSecond'][0].filename;
+
+   
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (req.files && req.files['image']) {
+      if (user.image) {
+        const existingImagePath = path.join(imagesDirectory, user.image);
+        if (fs.existsSync(existingImagePath)) {
+          fs.unlinkSync(existingImagePath);
+        }
+      }
+      user.image = req.files['image'][0].filename;
+    }
+
+    // Delete old 'imageSecond' if a new one is uploaded
+    if (req.files && req.files['imageSecond']) {
+      if (user.imageSecond) {
+        const existingImageSecondPath = path.join(imagesDirectory, user.imageSecond);
+        if (fs.existsSync(existingImageSecondPath)) {
+          fs.unlinkSync(existingImageSecondPath);
+        }
+      }
+      user.imageSecond = req.files['imageSecond'][0].filename;
+    }
+
+    // Update the user's information with the data from the request body
+    if (updateData.username) user.username = updateData.username;
+    if (updateData.firstName) user.firstName = updateData.firstName;
+    if (updateData.surname) user.surname = updateData.surname;
+    if (updateData.dob) user.dob = updateData.dob;
+    if (updateData.icNo) user.icNo = updateData.icNo;
+    if (updateData.gender) user.gender = updateData.gender;
+    if (updateData.address) user.address = updateData.address;
+    if (updateData.mobileNo) user.mobileNo = updateData.mobileNo;
+    if (updateData.email) user.email = updateData.email;
+    if (updateData.hospitalName) user.hospitalName = updateData.hospitalName;
+    if (updateData.department) user.department = updateData.department;
+    if (updateData.position) user.position = updateData.position;
+    if (updateData.mmcRegistrationNo) user.mmcRegistrationNo = updateData.mmcRegistrationNo;
+    if (updateData.image) user.image = updateData.image;
+    if (updateData.imageSecond) user.imageSecond = updateData.imageSecond;
+    // Save the updated user data
+    await user.save();
+
+    // You can choose which fields to include in the response
+    const responseData = {
+      image: user.image,
+      imageSecond: user.imageSecond,
+      username: user.username,
+      firstName: user.firstName,
+      surname: user.surname,
+      dob: user.dob,
+      icNo: user.icNo,
+      gender: user.gender,
+      address: user.address,
+      mobileNo: user.mobileNo,
+      email: user.email,
+      hospitalName: user.hospitalName,
+      department: user.department,
+      position: user.position,
+      mmcRegistrationNo: user.mmcRegistrationNo,
+    };
+
+    res.json(responseData);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send({ message: "Server Error" });
+  }
+});
+
+
+app.put('/updateStaffInfo/:icNo', upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'imageSecond', maxCount: 1 },
+]), async (req, res) => {
+  try {
+    const staffIcNo = req.params.icNo;
+    const updateData = req.body;
+
+    // Check if 'image' and 'imageSecond' fields are present in the request files
+    
+
+    // Find staff by icNo
+    const staff = await User.findOne({ icNo: staffIcNo });
+
+    if (!staff) {
+      return res.status(404).json({ message: 'Staff not found' });
+    }
+
+    if (req.files && req.files['image']) {
+      if (staff.image) {
+        const existingImagePath = path.join(imagesDirectory, staff.image);
+        if (fs.existsSync(existingImagePath)) {
+          fs.unlinkSync(existingImagePath);
+        }
+      }
+      staff.image = req.files['image'][0].filename;
+    }
+
+    // Check and update 'imageSecond'
+    if (req.files && req.files['imageSecond']) {
+      if (staff.imageSecond) {
+        const existingImageSecondPath = path.join(imagesDirectory, staff.imageSecond);
+        if (fs.existsSync(existingImageSecondPath)) {
+          fs.unlinkSync(existingImageSecondPath);
+        }
+      }
+      staff.imageSecond = req.files['imageSecond'][0].filename;
+    }
+
+
+    // Update staff's information with the data from the request body
+    if (updateData.username) staff.username = updateData.username;
+    if (updateData.firstName) staff.firstName = updateData.firstName;
+    if (updateData.surname) staff.surname = updateData.surname;
+    if (updateData.dob) staff.dob = updateData.dob;
+    if (updateData.icNo) staff.icNo = updateData.icNo;
+    if (updateData.gender) staff.gender = updateData.gender;
+    if (updateData.address) staff.address = updateData.address;
+    if (updateData.mobileNo) staff.mobileNo = updateData.mobileNo;
+    if (updateData.email) staff.email = updateData.email;
+    if (updateData.hospitalName) staff.hospitalName = updateData.hospitalName;
+    if (updateData.department) staff.department = updateData.department;
+    if (updateData.position) staff.position = updateData.position;
+    if (updateData.mmcRegistrationNo) staff.mmcRegistrationNo = updateData.mmcRegistrationNo;
+    if (updateData.image) staff.image = updateData.image;
+    if (updateData.imageSecond) staff.imageSecond = updateData.imageSecond;
+    // ... (add other fields as needed)
+
+    // Save the updated staff data
+    await staff.save();
+
+    // You can choose which fields to include in the response
+    const responseData = {
+      image: staff.image,
+      imageSecond: staff.imageSecond,
+      username: staff.username,
+      firstName: staff.firstName,
+      surname: staff.surname,
+      dob: staff.dob,
+      icNo: staff.icNo,
+      gender: staff.gender,
+      address: staff.address,
+      mobileNo: staff.mobileNo,
+      email: staff.email,
+      hospitalName: staff.hospitalName,
+      department: staff.department,
+      position: staff.position,
+      mmcRegistrationNo: staff.mmcRegistrationNo,
+      // ... (add other fields as needed)
+    };
+
+    res.json(responseData);
+  } catch (err) {
+    console.log(err.message);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+app.get("/user/:id", async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    // Assuming "Images" is your Mongoose model
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // You can choose which fields to include in the response
+    const responseData = {
+      image: user.image,
+      imageSecond: user.imageSecond,
+      username: user.username,
+      firstName: user.firstName,
+      surname: user.surname,
+      dob: user.dob,
+      icNo: user.icNo,
+      gender: user.gender,
+      address: user.address,
+      mobileNo: user.mobileNo,
+      email: user.email,
+      hospitalName: user.hospitalName,
+      department: user.department,
+      position: user.position,
+      mmcRegistrationNo: user.mmcRegistrationNo,
+    };
+
+    res.json(responseData);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send({ message: "Server Error" });
+  }
+});
+
+app.get('/users', async (req, res) => {
+  try {
+    const users = await User.find();
+    res.json(users);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+app.get('/getStaffInfo/:icNo', async (req, res) => {
+  try {
+    const staffIcNo = req.params.icNo;
+    const staff = await User.findOne({ icNo: staffIcNo });
+
+    if (!staff) {
+      return res.status(404).json({ message: 'Staff not found' });
+    }
+
+    res.json({ staff });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+app.get("/users/:hospitalName", async (req, res) => {
+  try {
+    const hospitalName = req.params.hospitalName;
+
+    // Find all patients with the specified hospitalName
+    const users = await User.find({ 'hospitalName': hospitalName });
+
+    res.json({ users: users });
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.get('/getStaffByEmail/:icNo', async (req, res) => {
+  try {
+    const staffIcNo = req.params.icNo;
+    const staff = await User.findOne({ icNo: staffIcNo });
+
+    if (!staff) {
+      return res.status(404).json({ message: 'Staff not found' });
+    }
+
+    res.json({ staff });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+//============================================================================================
+//add, delete, update view patient info
+//============================================================================================
+
 app.post('/addPatients', async (req, res) => {
   const {
     firstName,
@@ -723,13 +1002,58 @@ app.post('/addPatients', async (req, res) => {
 });
 
 
-
 app.get('/getPatients', async (req, res) => {
   try {
     // Assuming you have a model named "Patient" for patient data
     const patients = await Patient.find();
 
     res.json({ patients });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+app.get('/getPatientByEmail/:icNo', async (req, res) => {
+  try {
+    const patientIcNo = req.params.icNo;
+    const patient = await Patient.findOne({ icNo: patientIcNo });
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    res.json({ patient });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+app.get('/getPatientsStent', async (req, res) => {
+  try {
+    const patients = await Patient.find();
+
+    let stentStatusCounts = { active: 0, due: 0, expired: 0 };
+
+    patients.forEach(patient => {
+      patient.stentData.forEach(stent => {
+        const dueDate = calculateDueDate2(stent.insertedDate, stent.dueDate);
+        const status = getStentStatus(stent.insertedDate,new Date(), new Date(dueDate));
+        console.log("Mrn NO: "+ patient.mrnNo);
+        console.log(" DUeDate: "+stent.dueDate);
+console.log(" CaseID: "+stent.caseId);
+        if (status === 'active') {
+          stentStatusCounts.active++;
+        } else if (status === 'due') {
+          stentStatusCounts.due++;
+        } else if (status === 'expired') {
+          stentStatusCounts.expired++;
+        }
+      });
+    });
+
+    res.json({ stentStatusCounts });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -766,6 +1090,19 @@ app.get('/getPatientById/:id', async (req, res) => {
   }
 });
 
+app.get("/hospitalsP/:hospitalName/patients", async (req, res) => {
+  try {
+    const hospitalName = req.params.hospitalName;
+
+    // Find all patients with the specified hospitalName
+    const patients = await Patient.find({ 'stentData.hospitalName': hospitalName });
+
+    res.json({ patients: patients });
+  } catch (error) {
+    console.error("Error fetching patients:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 app.delete('/deletePatient/:id', async (req, res) => {
   try {
@@ -797,91 +1134,6 @@ app.delete('/deletePatient/:id', async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
-
-app.delete('/deleteStent/:id/:stentIndex', async (req, res) => {
-  try {
-    const patientId = req.params.id;
-    const stentIndex = parseInt(req.params.stentIndex);
-
-    const patient = await Patient.findById(patientId);
-
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient not found' });
-    }
-
-    if (stentIndex < 0 || stentIndex >= patient.stentData.length) {
-      return res.status(400).json({ message: 'Invalid stent index' });
-    }
-
-    // Remove the stent record from the array based on the index
-    patient.stentData.splice(stentIndex, 1);
-
-    // Save the updated patient data
-    await patient.save();
-
-    res.json({ message: 'Stent record deleted successfully' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-app.put('/updateStent/:id/:stentIndex', async (req, res) => {
-  try {
-    const patientId = req.params.id;
-    const stentIndex = parseInt(req.params.stentIndex);
-    const updatedStentData = req.body; // The updated stent data sent in the request body
-
-    const patient = await Patient.findById(patientId);
-
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient not found' });
-    }
-
-    if (stentIndex < 0 || stentIndex >= patient.stentData.length) {
-      return res.status(400).json({ message: 'Invalid stent index' });
-    }
-
-    // Update the stent record based on the index
-    patient.stentData[stentIndex] = updatedStentData;
-
-    // Save the updated patient data
-    await patient.save();
-
-    res.json({ message: 'Stent record updated successfully' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-
-app.get('/getStent/:id/:stentIndex', async (req, res) => {
-  try {
-    const patientId = req.params.id;
-    const stentIndex = parseInt(req.params.stentIndex);
-
-    const patient = await Patient.findById(patientId);
-
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient not found' });
-    }
-
-    if (stentIndex < 0 || stentIndex >= patient.stentData.length) {
-      return res.status(400).json({ message: 'Invalid stent index' });
-    }
-
-    // Retrieve the stent record based on the index
-    const stentRecord = patient.stentData[stentIndex];
-
-    res.json(stentRecord);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-
 
 app.put('/updatePatient/:id', async (req, res) => {
   try {
@@ -921,6 +1173,958 @@ app.put('/updatePatient/:id', async (req, res) => {
   }
 });
 
+app.put('/updatePatientInfo/:icNo', upload.fields([
+  { name: 'profilePic', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const patientIcNo = req.params.icNo;
+    let updateData = req.body;
+
+    // Find patient by icNo
+    const patient = await Patient.findOne({ icNo: patientIcNo });
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    // Update patient's information with the data from the request body
+   
+    // Check if profilePic field is present in the request files
+    if (req.files && req.files['profilePic']) {
+      if (patient.profilePic) {
+        const existingFilePath = path.join(imagesDirectory, patient.profilePic);
+        if (fs.existsSync(existingFilePath)) {
+          fs.unlinkSync(existingFilePath);
+        }
+      }
+      patient.profilePic = req.files['profilePic'][0].filename;
+    }
+
+    patient.firstName = updateData.firstName || patient.firstName;
+    patient.surname = updateData.surname || patient.surname;
+    patient.dob = updateData.dob || patient.dob;
+    patient.mrnNo = updateData.mrnNo || patient.mrnNo;
+    patient.icNo = updateData.icNo || patient.icNo;
+    patient.gender = updateData.gender || patient.gender;
+    patient.mobileNo = updateData.mobileNo || patient.mobileNo;
+    patient.email = updateData.email || patient.email;
+    patient.ethnicity = updateData.ethnicity || patient.ethnicity;
+    patient.nextOfKin.firstName = updateData.nextOfKin.firstName || patient.nextOfKin.firstName;
+    patient.nextOfKin.surname = updateData.nextOfKin.surname || patient.nextOfKin.surname;
+    patient.nextOfKin.mobileNo = updateData.nextOfKin.mobileNo || patient.nextOfKin.mobileNo;
+
+    // Save the updated patient data
+    await patient.save();
+
+    // Prepare and send response data
+    const responseData = {
+      profilePic: patient.profilePic,
+      firstName: patient.firstName,
+      surname: patient.surname,
+      dob: patient.dob,
+      icNo: patient.icNo,
+      mrnNo: patient.mrnNo,
+      gender: patient.gender,
+      address: patient.address,
+      mobileNo: patient.mobileNo,
+      email: patient.email,
+      ethnicity: patient.ethnicity,
+      nextOfKin:{
+        firstName: patient.nextOfKin.firstName,
+        surname: patient.nextOfKin.surname,
+        mobileNo: patient.nextOfKin.mobileNo,
+      }
+      // other fields...
+    };
+
+    res.json(responseData);
+  } catch (err) {
+    console.log(err.message);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
+
+//=======================================================================================================
+
+//fucntion calculate Due Date and stent status
+//==================================================================================================
+
+function calculateDueDate2(insertedDate,dueIn){
+  if (!insertedDate) {
+    return '';
+  }
+
+  // Convert the dueIn value to the number of days
+  let days = 0;
+  switch (dueIn) {
+    case '2 weeks':
+      days = 14;
+      break;
+    case '1 month':
+      days = 30;
+      break;
+    case '2 months':
+      days = 60;
+      break;
+    case '3 months':
+      days = 90;
+      break;
+    case '6 months':
+      days = 180;
+      break;
+    case '12 months':
+      days = 365; // Approximated to 365 days for a year
+      break;
+    case 'permanent':
+      days = 0;
+      break;
+    default:
+      days = 0;
+  }
+
+  // Calculate the due date by adding the number of days to the inserted date
+  const insertedDateTime = new Date(insertedDate).getTime();
+  const dueDateTime = new Date(insertedDateTime + days * 24 * 60 * 60 * 1000);
+  const formattedDueDate = dueDateTime.toISOString().split('T')[0];
+  console.log(formattedDueDate);
+  return formattedDueDate;
+}
+
+function getStentStatus(insertedDate,currentDate, dueDate) {
+  const insertedDateTime = new Date(insertedDate).getTime();
+  const currentDateTime = new Date(currentDate).getTime();
+  const dueDateTime = new Date(dueDate).getTime();
+
+  console.log(currentDateTime);
+  console.log(dueDateTime);
+
+  if (currentDateTime < insertedDateTime) {
+    return 'not active yet';
+  }
+
+  const diffTime = dueDateTime - currentDateTime;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+console.log(diffDays);
+
+  if (diffDays > 14 ) {
+    return 'active';
+  } else if (diffDays <= 14 && diffDays > 0) {
+    return 'due';
+  } else {
+    return 'expired';
+  }
+}
+
+//===================================================================================================
+//REPORT AREA API
+
+//==================================================================================
+
+app.get('/getAllActiveDueExpired', async (req, res) => {
+  try {
+    const patients = await Patient.find();
+
+    let stentStatusCounts = {
+      active: 0,
+      due: 0,
+      expired: 0
+    };
+
+    patients.forEach(patient => {
+      patient.stentData.forEach(stent => {
+       
+
+        const dueDate = calculateDueDate2(stent.insertedDate, stent.dueDate);
+        const status = getStentStatus(stent.insertedDate,new Date(), new Date(dueDate));
+
+        if (status === 'active') {
+          stentStatusCounts.active++;
+          console.log(patient.stentData);
+        } else if (status === 'due') {
+          stentStatusCounts.due++;
+          console.log(patient.stentData);
+        } else if (status === 'expired') {
+          stentStatusCounts.expired++;
+          console.log(patient.stentData);
+        }
+      });
+    });
+
+    res.json({ stentStatusCounts });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
+app.get('/dailyStentStatus', async (req, res) => {
+  const { hospitalName, startDate, endDate } = req.query;
+
+  try {
+    const patients = await Patient.find({ "stentData.hospitalName": hospitalName });
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setDate(end.getDate() + 1); // Include end date
+
+    let dailyStentStatusCounts = [];
+
+    for (let day = new Date(start); day < end; day.setDate(day.getDate() + 1)) {
+      let stentStatusCounts = {
+        date: day.toISOString().split('T')[0],
+        active: 0,
+        due: 0,
+        expired: 0
+      };
+
+      patients.forEach(patient => {
+        patient.stentData.forEach(stent => {
+          if (stent.hospitalName === hospitalName) {
+            const dueDate = calculateDueDate2(stent.insertedDate, stent.dueDate);
+            const status = getStentStatus(stent.insertedDate,day, new Date(dueDate));
+
+            if (status === 'active') {
+              stentStatusCounts.active++;
+            } else if (status === 'due') {
+              stentStatusCounts.due++;
+            } else if (status === 'expired') {
+              stentStatusCounts.expired++;
+            }
+          }
+        });
+      });
+
+      dailyStentStatusCounts.push(stentStatusCounts);
+    }
+
+    res.json({ dailyStentStatusCounts });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
+app.get('/daily-count', async (req, res) => {
+  const { hospitalName, startDate } = req.query;
+
+  try {
+      const start = new Date(startDate);
+      const end = new Date(startDate);
+      end.setDate(end.getDate() + 1); // Move to the next day
+
+      let newStentCount = 0;
+      let replacedStentCount = 0;
+      let removedStentCount = 0;
+      let expireStent = 0;
+
+      // Check and count new stents
+      const newStents = await StentRecord.find({
+          'stentData.hospitalName': hospitalName,
+          'stentData.insertedDate': { $gte: start, $lt: end }
+      });
+      
+      newStents.forEach(stent => {
+          stent.stentData.forEach(data => {
+              if (data.hospitalName === hospitalName && data.insertedDate >= start && data.insertedDate < end) {
+               
+                newStentCount++;
+              }
+          });
+      });
+
+      // Check and count replaced stents
+      const replacedStents = await replaceStentModel.find({
+          'newStent.hospitalName': hospitalName,
+          'removedStent.removalDate': { $gte: start, $lt: end }
+      });
+      console.log(replacedStents);
+      replacedStents.forEach(stent => {
+          if (stent.newStent.hospitalName === hospitalName && stent.removedStent.removalDate >= start && stent.timestamp < end) {
+              replacedStentCount++;
+          }
+      });
+
+      // Check and count removed stents
+      const removedStents = await RemovedStent.find({
+          'removalLocation': hospitalName,
+          'removalDate': { $gte: start, $lt: end } // Check for potential typo in your schema
+      });
+      removedStents.forEach(stent => {
+          if (stent.removalLocation === hospitalName && stent.removalDate >= start && stent.timestamp < end) {
+              removedStentCount++;
+          }
+      });
+
+      const patients = await Patient.find({
+        'stentData.hospitalName': hospitalName,
+      });
+      patients.forEach(patient => {
+        let hasExpiredStent = false;
+        patient.stentData.forEach(stent => {
+          const dueDate = calculateDueDate2(stent.insertedDate, stent.dueDate);
+          console.log(dueDate);
+
+          const status = getStentStatus(stent.insertedDate,new Date(), new Date(dueDate));
+          console.log(status);
+          if (stent.hospitalName === hospitalName && status === 'expired') {
+            hasExpiredStent = true;
+          }
+        });
+
+        if (hasExpiredStent) {
+          expireStent++;
+          
+        }
+        });
+      
+
+      res.json({
+          newStentCount,
+          replacedStentCount,
+          removedStentCount,
+          expireStent
+
+      });
+  } catch (error) {
+    console.log(error);
+      res.status(500).send('Server error');
+  }
+});
+
+app.get('/range-count', async (req, res) => {
+  const { hospitalName, startDate, endDate } = req.query;
+
+  try {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setDate(end.getDate() + 1); // Include the end date in the range
+
+    let dailyCounts = [];
+
+    for (let date = new Date(start); date < end; date.setDate(date.getDate() + 1)) {
+      let newStentCount = 0;
+      let replacedStentCount = 0;
+      let removedStentCount = 0;
+
+      let dayStart = new Date(date);
+      let dayEnd = new Date(date);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+
+      // Count new stents for the day
+      const newStents = await StentRecord.find({
+        'stentData.hospitalName': hospitalName,
+        'stentData.insertedDate': { $gte: dayStart, $lt: dayEnd }
+      });
+      // ... (Similar logic as in your previous code for counting newStents)
+      newStents.forEach(stent => {
+        stent.stentData.forEach(data => {
+            if (data.hospitalName === hospitalName && data.insertedDate >= start && data.insertedDate < end) {
+             
+              newStentCount++;
+            }
+        });
+    });
+
+      // Count replaced stents for the day
+      const replacedStents = await replaceStentModel.find({
+        'newStent.hospitalName': hospitalName,
+        'removedStent.removalDate': { $gte: dayStart, $lt: dayEnd }
+      });
+      // ... (Similar logic as in your previous code for counting replacedStents)
+      replacedStents.forEach(stent => {
+        if (stent.newStent.hospitalName === hospitalName && stent.removedStent.removalDate >= start && stent.timestamp < end) {
+            replacedStentCount++;
+        }
+    });
+
+      // Count removed stents for the day
+      const removedStents = await RemovedStent.find({
+        'removalLocation': hospitalName,
+        'removalDate': { $gte: dayStart, $lt: dayEnd }
+      });
+      // ... (Similar logic as in your previous code for counting removedStents)
+      removedStents.forEach(stent => {
+        if (stent.removalLocation === hospitalName && stent.removalDate >= start && stent.timestamp < end) {
+            removedStentCount++;
+        }
+    });
+
+      // Push daily count to the array
+      dailyCounts.push({
+        date: dayStart.toISOString().split('T')[0], // Format the date as 'YYYY-MM-DD'
+        newStentCount,
+        replacedStentCount,
+        removedStentCount
+      });
+    }
+    console.log({ hospitalName, startDate, endDate });
+    console.log({ start, end });
+    console.log(dailyCounts);
+
+    res.json(dailyCounts);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send('Server error');
+  }
+});
+
+//+++++++++++++++++++++++++++++++
+//Forgotten Stent Report
+
+//+++++++++++++++++++++++++++++++++
+
+app.get('/getFotgottenStentPatientsGender2', async (req, res) => {
+  try {
+    const patients = await Patient.find();
+
+    let stentStatusCounts = {
+      male: { active: 0, due: 0, expired: 0 },
+      female: { active: 0, due: 0, expired: 0 }
+    };
+
+    let countedPatients = {
+      male: new Set(),
+      female: new Set()
+    };
+
+    patients.forEach(patient => {
+      let hasExpiredStent = false;
+      patient.stentData.forEach(stent => {
+        const dueDate = calculateDueDate2(stent.insertedDate, stent.dueDate);
+        const status = getStentStatus(stent.insertedDate, new Date(), new Date(dueDate));
+
+        if (status === 'expired') {
+          hasExpiredStent = true;
+        }
+      });
+
+      if (hasExpiredStent) {
+        if (patient.gender.toLowerCase() === 'male' && !countedPatients.male.has(patient._id.toString())) {
+          stentStatusCounts.male.expired++;
+          countedPatients.male.add(patient._id.toString());
+        } else if (patient.gender.toLowerCase() === 'female' && !countedPatients.female.has(patient._id.toString())) {
+          stentStatusCounts.female.expired++;
+          countedPatients.female.add(patient._id.toString());
+        }
+      }
+    });
+
+    res.json({ stentStatusCounts });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+app.get('/getFotgottenStentPatientsAge', async (req, res) => {
+  try {
+    const patients = await Patient.find();
+
+    let stentStatusCountsByAge = {
+      '0-10': 0, '11-20': 0, '21-30': 0, '31-40': 0, '41-50': 0,
+      '51-60': 0, '61-70': 0, '71-80': 0, '81+': 0
+    };
+
+    let countedPatients = new Set();
+
+    const currentYear = new Date().getFullYear();
+
+    patients.forEach(patient => {
+      let hasExpiredStent = false;
+      patient.stentData.forEach(stent => {
+        const dueDate = calculateDueDate2(stent.insertedDate, stent.dueDate);
+        const status = getStentStatus(stent.insertedDate,new Date(), new Date(dueDate));
+
+        if (status === 'expired') {
+          hasExpiredStent = true;
+        }
+      });
+
+      if (hasExpiredStent && !countedPatients.has(patient._id.toString())) {
+        const patientAge = currentYear - patient.dob.getFullYear();
+        let ageCategory = '';
+
+        if (patientAge <= 10) {
+          ageCategory = '0-10';
+        } else if (patientAge <= 20) {
+          ageCategory = '11-20';
+        } else if (patientAge <= 30) {
+          ageCategory = '21-30';
+        } else if (patientAge <= 40) {
+          ageCategory = '31-40';
+        } else if (patientAge <= 50) {
+          ageCategory = '41-50';
+        } else if (patientAge <= 60) {
+          ageCategory = '51-60';
+        } else if (patientAge <= 70) {
+          ageCategory = '61-70';
+        } else if (patientAge <= 80) {
+          ageCategory = '71-80';
+        } else {
+          ageCategory = '81+';
+        }
+
+        stentStatusCountsByAge[ageCategory]++;
+        countedPatients.add(patient._id.toString());
+      }
+    });
+
+    res.json({ stentStatusCountsByAge });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+app.get('/getForgottenStentPatientsByEthnicity', async (req, res) => {
+  try {
+    const patients = await Patient.find();
+
+    let stentStatusCountsByEthnicity = {};
+
+    let countedPatients = new Set();
+
+    patients.forEach(patient => {
+      let hasExpiredStent = false;
+      patient.stentData.forEach(stent => {
+        const dueDate = calculateDueDate2(stent.insertedDate, stent.dueDate);
+        const status = getStentStatus(stent.insertedDate, new Date(), new Date(dueDate));
+
+        if (status === 'expired') {
+          hasExpiredStent = true;
+        }
+      });
+
+      if (hasExpiredStent && !countedPatients.has(patient._id.toString())) {
+        const ethnicity = patient.ethnicity || 'Unknown'; // Default to 'Unknown' if ethnicity is not specified
+
+        if (!stentStatusCountsByEthnicity[ethnicity]) {
+          stentStatusCountsByEthnicity[ethnicity] = 0;
+        }
+
+        stentStatusCountsByEthnicity[ethnicity]++;
+        countedPatients.add(patient._id.toString());
+      }
+    });
+
+    res.json({ stentStatusCountsByEthnicity });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
+app.get('/getForgottenStentPatientsByHospital', async (req, res) => {
+  try {
+    const patients = await Patient.find();
+
+    let stentStatusCountsByHospital = {};
+
+    patients.forEach(patient => {
+      patient.stentData.forEach(stent => {
+        const dueDate = calculateDueDate2(stent.insertedDate, stent.dueDate);
+        const status = getStentStatus(stent.insertedDate, new Date(), new Date(dueDate));
+
+        if (status === 'expired') {
+          const hospitalName = stent.hospitalName || 'Unknown'; // Use the hospitalName from the stent
+
+          if (!stentStatusCountsByHospital[hospitalName]) {
+            stentStatusCountsByHospital[hospitalName] = 0;
+          }
+
+          stentStatusCountsByHospital[hospitalName]++;
+        }
+      });
+    });
+
+    res.json({ stentStatusCountsByHospital });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
+//++++++++++++++++++++++++++++++
+
+//Insertion Stent Report
+
+//+++++++++++++++++++++++++++++++
+
+async function getStentInsertionsByGender() {
+  try {
+    const stentInsertionsByGender = await StentRecord.aggregate([
+      {
+        $lookup: {
+          from: "patients", // Replace with your Patient collection name
+          localField: "icNo",
+          foreignField: "icNo",
+          as: "patientInfo"
+        }
+      },
+      {
+        $unwind: "$patientInfo"
+      },
+      {
+        $group: {
+          _id: "$patientInfo.gender",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    return stentInsertionsByGender;
+  } catch (err) {
+    console.error("Error in getStentInsertionsByGender:", err);
+    throw err;
+  }
+}
+
+// Express route
+app.get('/stentInsertionsByGender', async (req, res) => {
+  try {
+    const data = await getStentInsertionsByGender();
+    res.json(data);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+
+async function getStentInsertionsByEthnicity() {
+  try {
+    const stentInsertionsByEthnicity = await StentRecord.aggregate([
+      {
+        $lookup: {
+          from: "patients", // Replace with your Patient collection name
+          localField: "icNo",
+          foreignField: "icNo",
+          as: "patientInfo"
+        }
+      },
+      {
+        $unwind: "$patientInfo"
+      },
+      {
+        $group: {
+          _id: "$patientInfo.ethnicity",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    return stentInsertionsByEthnicity;
+  } catch (err) {
+    console.error("Error in getStentInsertionsByEthnicity:", err);
+    throw err;
+  }
+}
+
+
+app.get('/stentInsertionsByEthnicity', async (req, res) => {
+  try {
+    const data = await getStentInsertionsByEthnicity();
+    res.json(data);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+
+async function getStentInsertionsByHospital() {
+  try {
+    const stentInsertionsByHospital = await StentRecord.aggregate([
+      { $unwind: "$stentData" },
+      { $group: {
+          _id: "$stentData.hospitalName",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } } // Optional: Sort by count in descending order
+    ]);
+
+    return stentInsertionsByHospital;
+  } catch (err) {
+    console.error("Error in getStentInsertionsByHospital:", err);
+    throw err;
+  }
+}
+
+
+app.get('/stentInsertionsByHospital', async (req, res) => {
+  try {
+    const data = await getStentInsertionsByHospital();
+    res.json(data);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+
+async function getStentInsertionsByAgeRange() {
+  try {
+    const currentYear = new Date().getFullYear();
+    const stentInsertionsByAgeRange = await StentRecord.aggregate([
+      {
+        $lookup: {
+          from: "patients", // Replace with your Patient collection name
+          localField: "icNo",
+          foreignField: "icNo",
+          as: "patientInfo"
+        }
+      },
+      {
+        $unwind: "$patientInfo"
+      },
+      {
+        $addFields: {
+          "patientAge": {
+            $subtract: [currentYear, { $year: "$patientInfo.dob" }]
+          }
+        }
+      },
+      {
+        $project: {
+          patientAge: 1,
+          ageRange: {
+            $switch: {
+              branches: [
+                { case: { $lte: ["$patientAge", 10] }, then: "0-10" },
+                { case: { $and: [{ $gt: ["$patientAge", 10] }, { $lte: ["$patientAge", 20] }] }, then: "11-20" },
+                { case: { $and: [{ $gt: ["$patientAge", 20] }, { $lte: ["$patientAge", 30] }] }, then: "21-30" },
+                // Add other age ranges here...
+                { case: { $gte: ["$patientAge", 81] }, then: "81+" }
+              ],
+              default: "Unknown"
+            }
+          }
+        }
+      },
+      {
+        $group: {
+          _id: "$ageRange",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    return stentInsertionsByAgeRange;
+  } catch (err) {
+    console.error("Error in getStentInsertionsByAgeRange:", err);
+    throw err;
+  }
+}
+
+
+app.get('/stentInsertionsByAgeRange', async (req, res) => {
+  try {
+    const data = await getStentInsertionsByAgeRange();
+    res.json(data);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+
+
+
+//=======================================================================================================================================
+//Stent Management
+
+//=========================================================================================
+
+app.post('/stents/:id', async (req, res) => {
+  try {
+    const patientId = req.params.id; // Access the patient's ID from the URL
+
+    // Find the patient by ID
+    const patient = await Patient.findById(patientId);
+const PatientmrnNo =patient.mrnNo;
+console.log("MRN NO: "+PatientmrnNo);
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    // Create a new stent object
+    const newStentData = {
+      caseId: req.body.caseId,
+      mrnNo: PatientmrnNo,
+      laterality: req.body.laterality,
+      hospitalName: req.body.hospitalName,
+      insertedDate: req.body.insertedDate,
+
+
+     
+      
+     
+       dueDate: req.body.dueDate,
+       size: req.body.size,
+       length: req.body.length,
+      
+       stentBrand: req.body.stentBrand,
+       placeOfInsertion: req.body.placeOfInsertion,
+       remarks: req.body.remarks,
+      // Add other stent properties here
+    };
+
+    if (req.body.stentType === 'others') {
+      // If stentType is 'others', use stentTypeOther as the value
+      newStentData.stentType = req.body.stentTypeOther;
+    } else {
+      // Use the selected stentType from the list
+      newStentData.stentType = req.body.stentType;
+    }
+
+    // Add the new stent to the stentData array
+    patient.stentData.push(newStentData);
+
+    // Save the updated patient with the new stent
+    await patient.save();
+
+    console.log(newStentData);
+
+    const newLogEntry = new StentLog({
+      patientId: patient._id,
+      
+      patientIcNo: patient.icNo,
+      hospitalName: newStentData.hospitalName,
+      action: 'Added new stent',
+      details: newStentData,
+      timestamp: new Date()
+    });
+
+    await newLogEntry.save();
+    console.log(newLogEntry);
+
+const newStentRecord = new StentRecord({
+      patientId: patient._id,
+      icNo: patient.icNo,
+     
+      mrnNo: patient.mrnNo,
+      firstName: patient.firstName,
+      surname: patient.surname,
+      mobileNo: patient.mobileNo,
+      email: patient.email,
+     stentData: newStentData
+      
+    });
+
+    await newStentRecord.save();
+    
+    res.status(201).json(newStentData);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+app.delete('/deleteStent/:id/:stentIndex', async (req, res) => {
+  try {
+    const patientId = req.params.id;
+    const removalLocation = req.body.removalLocation;
+    const removedBy = req.body.removedBy;
+    const stentIndex = parseInt(req.params.stentIndex);
+
+    const patient = await Patient.findById(patientId);
+    const removedStentData = patient.stentData[stentIndex];
+
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    if (stentIndex < 0 || stentIndex >= patient.stentData.length) {
+      return res.status(400).json({ message: 'Invalid stent index' });
+    }
+
+    // Remove the stent record from the array based on the index
+    patient.stentData.splice(stentIndex, 1);
+
+    // Save the updated patient data
+    await patient.save();
+
+    const newLogEntry = new StentLog({
+      patientId: patient._id,
+      action: 'Remove Stent',
+      details: removedStentData,
+      patientIcNo: patient.icNo,  // assuming you have icNo in your Patient model
+      hospitalName: removedStentData.hospitalName,  // assuming hospitalName is part of the stent data
+    });
+
+    // Save the log entry
+    await newLogEntry.save();
+
+ 
+
+
+    res.json({ message: 'Stent record deleted successfully' });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+app.put('/updateStent/:id/:stentIndex', async (req, res) => {
+  try {
+    const patientId = req.params.id;
+    const stentIndex = parseInt(req.params.stentIndex);
+    const updatedStentData = req.body; // The updated stent data sent in the request body
+
+    const patient = await Patient.findById(patientId);
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    if (stentIndex < 0 || stentIndex >= patient.stentData.length) {
+      return res.status(400).json({ message: 'Invalid stent index' });
+    }
+
+    // Update the stent record based on the index
+    patient.stentData[stentIndex] = updatedStentData;
+
+    // Save the updated patient data
+    await patient.save();
+
+    res.json({ message: 'Stent record updated successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+app.get('/getStent/:id/:stentIndex', async (req, res) => {
+  try {
+    const patientId = req.params.id;
+    const stentIndex = parseInt(req.params.stentIndex);
+
+    const patient = await Patient.findById(patientId);
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    if (stentIndex < 0 || stentIndex >= patient.stentData.length) {
+      return res.status(400).json({ message: 'Invalid stent index' });
+    }
+
+    // Retrieve the stent record based on the index
+    const stentRecord = patient.stentData[stentIndex];
+
+    res.json(stentRecord);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
 
 app.put('/updateStentData/:id', async (req, res) => {
   const patientId = req.params.id;
@@ -945,10 +2149,9 @@ app.put('/updateStentData/:id', async (req, res) => {
   }
 });
 
-
-
-
-
+//+++++++++++++++++++++++++++++++++
+//         stent record
+//++++++++++++++++++++++++++++++++
 
 app.post('/stentRecords', async (req, res) => {
   try {
@@ -994,69 +2197,149 @@ app.get('/stentRecords', async (req, res) => {
   }
 });
 
-app.post('/stents/:id', async (req, res) => {
+app.get('/stentRecords/:mrnNo', async (req, res) => {
   try {
-    const patientId = req.params.id; // Access the patient's ID from the URL
+    const mrnNo = req.params.mrnNo; // Get the MRN number from path parameters
 
-    // Find the patient by ID
+    // Retrieve stent records for a specific MRN number
+    const records = await StentRecord.find({ 'mrnNo': mrnNo });
+    if (records.length === 0) {
+      return res.status(404).json({ message: "No records found for the provided MRN number." });
+    }
+
+    res.status(200).json(records);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+//++++++++++++++++++++++++++++
+
+//            replace stent
+//+++++++++++++++++++++++++++++
+
+app.post('/replaceAddStents/:patientId', async (req, res) => {
+  try {
+    const patientId = req.params.patientId;
+    const { newStentData, caseId } = req.body;
+
+   
+
+    // Find the patient by ID and add the new stent
     const patient = await Patient.findById(patientId);
-
     if (!patient) {
+      console.log("Patient not found");
       return res.status(404).json({ message: 'Patient not found' });
     }
 
-    // Create a new stent object
-    const newStentData = {
-      caseId: req.body.caseId,
-      mrnNo: req.body.mrnNo,
-      laterality: req.body.laterality,
-      hospitalName: req.body.hospitalName,
-      insertedDate: req.body.insertedDate,
-
-
-     
-      mrnNo:req.body.mrnNo,
-     
-       dueDate: req.body.dueDate,
-       size: req.body.size,
-       length: req.body.length,
-      
-       stentBrand: req.body.stentBrand,
-       placeOfInsertion: req.body.placeOfInsertion,
-       remarks: req.body.remarks,
-      // Add other stent properties here
-    };
-
-    if (req.body.stentType === 'others') {
-      // If stentType is 'others', use stentTypeOther as the value
-      newStentData.stentType = req.body.stentTypeOther;
-    } else {
-      // Use the selected stentType from the list
-      newStentData.stentType = req.body.stentType;
-    }
-
-    // Add the new stent to the stentData array
     patient.stentData.push(newStentData);
-
-    // Save the updated patient with the new stent
     await patient.save();
 
-    res.status(201).json(newStentData);
+    // Update the ReplaceStent collection with the new stent info
+    const replaceStent = await replaceStentModel.findOne({'removedStent.caseId':caseId});
+    if (!replaceStent) {
+      console.log("Replacement stent record not found");
+      return res.status(404).json({ message: 'Replacement stent record not found' });
+    }
+
+    replaceStent.newStent = newStentData;
+    await replaceStent.save();
+
+    const newLogEntry = new StentLog({
+      patientId: patient._id,
+      action: 'Replace Stent',
+      details: replaceStent,
+      patientIcNo: patient.icNo,  // assuming you have icNo in your Patient model
+      hospitalName: replaceStent.newStent.hospitalName,  // assuming hospitalName is part of the stent data
+    });
+
+    await newLogEntry.save();
+
+    res.status(201).json({ message: 'New stent added and replacement updated', newStent: newStentData });
   } catch (err) {
-    console.error(err);
+    console.log(err);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
 
+app.post('/replaceStents/:patientId', async (req, res) => {
+  const patientId = req.params.patientId;
+  const removedStentInfo = req.body;
+  const patient = await Patient.findById(patientId);
+  try {
+    // Create a new removed stent document using the Mongoose model
+    // const newRemovedStent = new RemovedStent({
+    //   ...removedStentInfo,
+    //   patientId,
+    // });
+
+    
+    // await newRemovedStent.save();
+
+    const replaceStentId = new mongoose.Types.ObjectId(); // Generate a unique ID
+
+    const newReplaceStent = new replaceStentModel({
+      _id: replaceStentId,
+      patientId,
+      mrnNo: patient.mrnNo,
+      removedStent: removedStentInfo,
+      newStent: {} // Placeholder for new stent
+    });
+
+    await newReplaceStent.save();
+
+    // Respond with a success message or the newly added stent information
+    res.status(201).json({ message: 'Removed Stent added successfully', data: newReplaceStent });
+  } catch (error) {
+    console.log(error);
+    // Handle any errors that occur during the save process
+    res.status(500).json({ error: 'Failed to add removed stent', details: error.message });
+  }
+});
+
+app.get('/replaceStents', async (req, res) => {
+  try {
+    const replaceStents = await replaceStentModel.find().populate('patientId');
+    res.status(200).json(replaceStents);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/replaceStents/:mrnNo', async (req, res) => {
+  try {
+    const mrnNo = req.params.mrnNo; // Get the MRN number from path parameters
+
+    // Retrieve replaced stent records where the newStent's MRN number matches the provided MRN number
+    //const records = await RemovedStent.find({ 'mrnNo': mrnNo });
+    const records = await replaceStentModel.find({ 'mrnNo': mrnNo });
+    if (records.length === 0) {
+      return res.status(404).json({ message: "No records found for the provided MRN number in new stents." });
+    }
+
+    res.status(200).json(records);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+//++++++++++++++++++++++++++++
+
+//            remove stent
+//+++++++++++++++++++++++++++++
+
+
 app.post('/removedStents/:patientId', async (req, res) => {
   const patientId = req.params.patientId;
   const removedStentInfo = req.body;
-
+  const patient = await Patient.findById(patientId);
   try {
     // Create a new removed stent document using the Mongoose model
     const newRemovedStent = new RemovedStent({
       ...removedStentInfo,
       patientId,
+      mrnNo: patient.mrnNo,
+      timestamp: new Date()
     });
 
     // Save the removed stent document to the database
@@ -1069,6 +2352,60 @@ app.post('/removedStents/:patientId', async (req, res) => {
     res.status(500).json({ error: 'Failed to add removed stent', details: error.message });
   }
 });
+
+app.get('/removedStents', async (req, res) => {
+  try {
+    const removedStents = await RemovedStent.find();
+    res.status(200).json(removedStents);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/removedStents/:mrnNo', async (req, res) => {
+  try {
+    const mrnNo = req.params.mrnNo; // Get the MRN number from path parameters
+
+    // Retrieve removed stent records for a specific MRN number
+    const records = await RemovedStent.find({ 'mrnNo': mrnNo });
+    if (records.length === 0) {
+      return res.status(404).json({ message: "No records found for the provided MRN number." });
+    }
+
+    res.status(200).json(records);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
+app.get('/stent-logs', async (req, res) => {
+  const { hospitalName, startDate } = req.query;
+
+  try {
+      const startOfDay = new Date(startDate);
+      startOfDay.setHours(0, 0, 0, 0); // Set to the start of the day
+
+      const endOfDay = new Date(startDate);
+      endOfDay.setHours(23, 59, 59, 999); // Set to the end of the day
+
+      const logs = await StentLog.find({
+          hospitalName: hospitalName,
+          timestamp: { $gte: startOfDay, $lte: endOfDay }
+      }).sort({ timestamp: -1 }); // Sorting by timestamp in descending order
+console.log(logs);
+      res.json(logs);
+  } catch (error) {
+      console.error(error);
+      res.status(500).send('Server error');
+  }
+});
+
+//=======================================================================================================================
+//Send Email api
+
+//=======================================================================================
 
 
 app.post('/send-email', async (req, res) => {
@@ -1167,8 +2504,8 @@ const checkStentsAndSendEmails = async () => {
             (daysLeft === 0 && !stent.notificationSent.expired)) {
           const subject = daysLeft === 14 ? 'Stent Due Soon' : 'Stent is Expired';
           const message = daysLeft === 14 
-            ? 'Your stent will be due soon. Please schedule a checkup.' 
-            : 'Your stent is expired. Please contact us immediately.';
+            ? 'Your stent will be due in 2 weeks soon. ' 
+            : 'Your stent is expired. Please visit your hospital to remove/ replace your stent.';
           
           let mailOptions = {
             from: 'puajingsheng2001@gmail.com',
@@ -1209,12 +2546,9 @@ const checkStentsAndSendEmails = async () => {
   }
 };
 
-// app.use(express.static('public'));
-
-// app.get('/pushNoti', function(req, res) {
-//   res.sendFile(path.join(__dirname, 'public', 'index.html'));
-// });
-
+//=======================================================================================================
+//for push notification
+//===============================================================================================================
 
 const publicVapidKey =
   "BH009TIykrF5IwMRCR0fjSrCotnMkOZY3Ahag7ZpzewDMSjml9DYaW4-uX8N7H3ljZP_Y_VhyyjmiSk0HKv-J94";
@@ -1227,7 +2561,7 @@ webpush.setVapidDetails(
 );
 
 app.post('/subscribe', async (req, res) => {
-  const subscription = new Subscription(req.body); // create a new instance with the request body
+  const subscription = new Subscription(req.body); 
 
   try {
     await subscription.save(); // save the subscription to the database
@@ -1236,10 +2570,6 @@ app.post('/subscribe', async (req, res) => {
     res.status(500).json({ message: 'Failed to save subscription', error });
   }
 });
-
-
-
-// Call the function to unsubscribe
 
 
 const getSubscriptionsFromDatabase = async () => {
@@ -1251,7 +2581,7 @@ const getSubscriptionsFromDatabase = async () => {
   }
 };
 
-// const checkStentsAndSendNotifications = async () => {
+
 //   try {
 //     const patients = await Patient.find({ 'stentData': { $exists: true, $not: { $size: 0 } } });
 
@@ -1321,8 +2651,8 @@ const checkStentsAndSendNotificationss = async () => {
         const timeDiff = new Date(dueDate).getTime() - new Date().getTime();
         const daysLeft = Math.ceil(timeDiff / (1000 * 3600 * 24));
 
-        if ((daysLeft === 14 && !stent.notificationSent.fourteenDayWarning) ||
-            (daysLeft === 0 && !stent.notificationSent.expired)) {
+        if ((daysLeft === 14 && !stent.pushnotificationSent.fourteenDayWarning) ||
+            (daysLeft === 0 && !stent.pushnotificationSent.expired)) {
           const notificationPayload = JSON.stringify({
             title: daysLeft === 14 ? 'Stent Due Soon' : 'Stent is Expired',
             body: daysLeft === 14 
@@ -1338,18 +2668,18 @@ const checkStentsAndSendNotificationss = async () => {
 
           // Update notification sent status in your database here
           if (daysLeft === 14) {
-            stent.notificationSent.fourteenDayWarning = true;
+            stent.pushnotificationSent.fourteenDayWarning = true;
            console.log(`${patient.firstname} due soon`);
           } else if (daysLeft === 0) {
-            stent.notificationSent.expired = true;
+            stent.pushnotificationSent.expired = true;
               console.log(`${patient.firstname} epxired today`);
           }
           await patient.save(); // Save the patient with updated stent data
         }
-        else if(stent.notificationSent.fourteenDayWarning){
+        else if(stent.pushnotificationSent.fourteenDayWarning){
           console.log(`${patient.firstName} Stent due noti send already`);
         }
-        else if(stent.notificationSent.expired){
+        else if(stent.pushnotificationSent.expired){
           console.log(`${patient.firstName} Stent expired noti send already`);
         }
         else{
@@ -1362,23 +2692,83 @@ const checkStentsAndSendNotificationss = async () => {
   }
 };
 
-const checkStentsAndSendNotifications = async () => {
-  // Retrieve all subscription objects from the database
-  const subscriptions = await getSubscriptionsFromDatabase();
-  
-  // Construct your notification payload. This is just an example payload.
-  const notificationPayload = JSON.stringify({
-    title: 'Stent Reminder',
-    body: 'This is a reminder to check your stent.',
-    icon: 'https://i.ibb.co/Chqt5S0/4.png'
-  });
+const sendPush = async () => {
+  try {
+    const patients = await Patient.find({ 'stentData': { $exists: true, $not: { $size: 0 } } });
+    const subscriptions = await getSubscriptionsFromDatabase();
 
-  // Send a notification to each subscription
-  subscriptions.forEach(subscription => {
-    webpush.sendNotification(subscription, notificationPayload)
-      .catch(error => console.error('Error sending push notification:', error));
-  });
+    for (const patient of patients) {
+     
+          const notificationPayload = JSON.stringify({
+            title:'Stent is Expired Sooooooooooooooooooo',
+          //  body:  `Your stent will be due soon. Please schedule a checkup for ${patient.firstName} ${patient.surname}.`,
+           body: 'Notified by NUST Application',  
+         
+  icon: '../MML.png'
+           
+          });
+
+          subscriptions.forEach(subscription => {
+            webpush.sendNotification(subscription, notificationPayload)
+              .catch(error => console.log('Error sending push notification:', error));
+          });
+
+          // Update notification sent status in your database here
+         
+      }
+    }
+   catch (err) {
+    console.error('Error in checkStentsAndSendNotifications:', err);
+  }
 };
+
+const checkStentsAndSendNotifications = async () => {
+  try {
+    const patients = await Patient.find({ 'stentData': { $exists: true, $not: { $size: 0 } } });
+
+    for (const patient of patients) {
+      for (let stent of patient.stentData) {
+        const dueDate = calculateDueDate2(stent.insertedDate, stent.dueDate);
+        const status = getStentStatus(stent.insertedDate, new Date(), dueDate);
+
+        if(stent.pushnotificationSent.fourteenDayWarning){
+
+          console.log("Notification sent already");
+        }
+        if ((status === 'due' && !stent.pushnotificationSent.fourteenDayWarning) ||
+            (status === 'expired' && !stent.pushnotificationSent.expired)) {
+          const notificationPayload = JSON.stringify({
+            title: status === 'due' ? 'Stent Due Soon' : 'Stent is Expired',
+            body: status === 'due' 
+              ? `Your stent will be due soon. Please schedule a checkup for ${patient.firstName} ${patient.surname}.` 
+              : `Your stent is expired for ${patient.firstName} ${patient.surname}. Please contact us immediately.`,
+            icon: 'https://i.ibb.co/Chqt5S0/4.png'
+          });
+
+          // Send notifications here (e.g., via webpush, email, etc.)
+
+          // Update notification sent status
+          if (status === 'due') {
+            stent.pushnotificationSent.fourteenDayWarning = true;
+            console.log(`${patient.firstName} due soon notification sent`);
+          } else if (status === 'expired') {
+            stent.pushnotificationSent.expired = true;
+            console.log(`${patient.firstName} expired notification sent`);
+          }
+          await patient.save(); // Save the patient with updated stent data
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error in checkStentsAndSendNotifications:', err);
+  }
+};
+
+//==================================================================================================================
+
+//Role Management
+
+//====================================================================================
 
 
 app.get('/role', async (req, res) => {
@@ -1406,7 +2796,6 @@ app.get('/permissions', async (req, res) => {
       res.status(500).send('Error fetching permissions: ' + error.message);
   }
 });
-
 
 app.post('/role', async (req, res) => {
   const { name, permissions } = req.body;
@@ -1461,38 +2850,29 @@ app.put('/role', async (req, res) => {
 });
 
 
-//new
-app.get('/getPatientByEmail/:icNo', async (req, res) => {
-  try {
-    const patientIcNo = req.params.icNo;
-    const patient = await Patient.findOne({ icNo: patientIcNo });
+app.get('/role/:name', async (req, res) => {
+  const roleName = req.params.name;
 
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient not found' });
+  try {
+    // Find the role in the database by name
+    const role = await Role.findOne({ name: roleName });
+
+    // Check if the role was found
+    if (!role) {
+      return res.status(404).send(`Role with name ${roleName} not found`);
     }
 
-    res.json({ patient });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Internal Server Error' });
+    // Send the role information as a response
+    res.status(200).json({ name: role.name, permissions: role.permissions });
+  } catch (error) {
+    // Send an error response if something goes wrong
+    res.status(500).send('Error retrieving role information: ' + error.message);
   }
 });
 
-app.get('/getStaffByEmail/:icNo', async (req, res) => {
-  try {
-    const staffIcNo = req.params.icNo;
-    const staff = await User.findOne({ icNo: staffIcNo });
-
-    if (!staff) {
-      return res.status(404).json({ message: 'Staff not found' });
-    }
-
-    res.json({ staff });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
+//===================================================================================================
+//login
+//====================================================================================================
 
 app.post('/login', async (req, res) => {
   const { icNo, password } = req.body;
@@ -1546,38 +2926,10 @@ app.post('/logout', (req, res) => {
   });
 });
 
-app.get('/role/:name', async (req, res) => {
-  const roleName = req.params.name;
 
-  try {
-    // Find the role in the database by name
-    const role = await Role.findOne({ name: roleName });
-
-    // Check if the role was found
-    if (!role) {
-      return res.status(404).send(`Role with name ${roleName} not found`);
-    }
-
-    // Send the role information as a response
-    res.status(200).json({ name: role.name, permissions: role.permissions });
-  } catch (error) {
-    // Send an error response if something goes wrong
-    res.status(500).send('Error retrieving role information: ' + error.message);
-  }
-});
-
-app.get('/users', async (req, res) => {
-  try {
-      // Fetch all roles from the database
-      const users = await User.find();
-
-      // Send the roles data as a response
-      res.status(200).json(users);
-  } catch (error) {
-      // Send an error response if something goes wrong
-      res.status(500).send('Error fetching users ' + error.message);
-  }
-});
+//=====================================================================
+//getHospital
+//=====================================================================
 
 app.get("/hospitals", async (req, res) => {
   try {
@@ -1602,538 +2954,6 @@ app.get("/hospitalsP", async (req, res) => {
   }
 });
 
-app.get("/hospitalsP/:hospitalName/patients", async (req, res) => {
-  try {
-    const hospitalName = req.params.hospitalName;
-
-    // Find all patients with the specified hospitalName
-    const patients = await Patient.find({ 'stentData.hospitalName': hospitalName });
-
-    res.json({ patients: patients });
-  } catch (error) {
-    console.error("Error fetching patients:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-app.get("/users/:hospitalName", async (req, res) => {
-  try {
-    const hospitalName = req.params.hospitalName;
-
-    // Find all patients with the specified hospitalName
-    const users = await User.find({ 'hospitalName': hospitalName });
-
-    res.json({ users: users });
-  } catch (error) {
-    console.error("Error fetching users:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-app.get("/application/:hospitalName", async (req, res) => {
-  try {
-    const hospitalName = req.params.hospitalName;
-
-    // Find all patients with the specified hospitalName
-    const applications = await Images.find({ 'hospitalName': hospitalName });
-
-    res.json({ applications: applications });
-  } catch (error) {
-    console.error("Error fetching application:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-app.get("/user/:id", async (req, res) => {
-  try {
-    const userId = req.params.id;
-
-    // Assuming "Images" is your Mongoose model
-    const user = await User.findById(userId);
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // You can choose which fields to include in the response
-    const responseData = {
-      image: user.image,
-      imageSecond: user.imageSecond,
-      username: user.username,
-      firstName: user.firstName,
-      surname: user.surname,
-      dob: user.dob,
-      icNo: user.icNo,
-      gender: user.gender,
-      address: user.address,
-      mobileNo: user.mobileNo,
-      email: user.email,
-      hospitalName: user.hospitalName,
-      department: user.department,
-      position: user.position,
-      mmcRegistrationNo: user.mmcRegistrationNo,
-    };
-
-    res.json(responseData);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send({ message: "Server Error" });
-  }
-});
-
-app.delete("/user/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await User.findById(id);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-    if (user.image) {
-      const imagePath = path.join(imagesDirectory, user.image);
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
-    }
-
-    if (user.imageSecond) {
-      const imageSecondPath = path.join(imagesDirectory, user.imageSecond);
-      if (fs.existsSync(imageSecondPath)) {
-        fs.unlinkSync(imageSecondPath);
-      }
-    }
-    await User.findByIdAndDelete(id);
-    return res.status(200).send({ message: "User deleted successfully" });
-  } catch (error) {
-    console.log(error.message);
-    res.status(500).send({ message: error.message });
-  }
-});
-
-app.get('/users', async (req, res) => {
-  try {
-    const users = await User.find();
-    res.json(users);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ message: 'Server Error' });
-  }
-});
-
-// app.put('/updateUser/:id', async (req, res) => {
-//   try {
-//     const userId = req.params.id;
-//     const updateData = req.body; // The updated data is expected in the request body
-
-//     // Assuming you have a model named "Patient" for patient data
-//     const user = await User.findById(userId);
-
-//     if (!user) {
-//       return res.status(404).json({ message: 'Patient not found' });
-//     }
-
-//     // Update the patient's information with the data from the request body
-//     user.username = updateData.username;
-//     user.firstName = updateData.firstName;
-//     user.surname = updateData.surname;
-//     user.dob = updateData.dob;
-//     user.icNo = updateData.icNo;
-//     user.gender = updateData.gender;
-//     user.address = updateData.address;
-//     user.mobileNo = updateData.mobileNo;
-//     user.email = updateData.email;
-//     user.hospitalName = updateData.hospitalName;
-//     user.department = updateData.department;
-//     user.position = updateData.position;
-//     user.mmcRegistrationNo = updateData.mmcRegistrationNo;
-//     user.image = updateData.image;
-     
-    
-
-//     // Save the updated patient data
-//     await user.save();
-
-//     res.json({ message: 'User updated successfully' });
-//   } catch (err) {
-//     console.log(err);
-//     res.status(500).json({ message: 'Internal Server Error' });
-//   }
-// });
-
-// app.put('/updateUser/:id', async (req, res) => {
-//   try {
-//     const userId = req.params.id;
-//     const updateData = req.body;
-
-//     const user = await User.findById(userId);
-
-//     if (!user) {
-//       return res.status(404).json({ message: 'User not found' });
-//     }
-
-//     // Update the user's information with the data from the request body
-//     if (updateData.username) user.username = updateData.username;
-//     if (updateData.firstName) user.firstName = updateData.firstName;
-//     if (updateData.surname) user.surname = updateData.surname;
-//     if (updateData.dob) user.dob = updateData.dob;
-//     if (updateData.icNo) user.icNo = updateData.icNo;
-//     if (updateData.gender) user.gender = updateData.gender;
-//     if (updateData.address) user.address = updateData.address;
-//     if (updateData.mobileNo) user.mobileNo = updateData.mobileNo;
-//     if (updateData.email) user.email = updateData.email;
-//     if (updateData.hospitalName) user.hospitalName = updateData.hospitalName;
-//     if (updateData.department) user.department = updateData.department;
-//     if (updateData.position) user.position = updateData.position;
-//     if (updateData.mmcRegistrationNo) user.mmcRegistrationNo = updateData.mmcRegistrationNo;
-//     if (updateData.image) user.image = updateData.image;
-
-//     // Save the updated user data
-//     await user.save();
-
-//     res.json({ message: 'User updated successfully' });
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: 'Internal Server Error' });
-//   }
-// });
-
-app.put("/user/:id", upload.fields([
-  {name: 'image',maxCount: 1},
-  {name: 'imageSecond',maxCount: 1},
-]), async (req, res) => {
-  try {
-    const userId = req.params.id;
-    const updateData = req.body;
-    //const image = req.files && req.files['image'] && req.files['image'][0] && req.files['image'][0].filename;
-    //const imageSecond = req.files && req.files['imageSecond'] && req.files['imageSecond'][0] && req.files['imageSecond'][0].filename;
-
-   
-    const user = await User.findById(userId);
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    if (req.files && req.files['image']) {
-      if (user.image) {
-        const existingImagePath = path.join(imagesDirectory, user.image);
-        if (fs.existsSync(existingImagePath)) {
-          fs.unlinkSync(existingImagePath);
-        }
-      }
-      user.image = req.files['image'][0].filename;
-    }
-
-    // Delete old 'imageSecond' if a new one is uploaded
-    if (req.files && req.files['imageSecond']) {
-      if (user.imageSecond) {
-        const existingImageSecondPath = path.join(imagesDirectory, user.imageSecond);
-        if (fs.existsSync(existingImageSecondPath)) {
-          fs.unlinkSync(existingImageSecondPath);
-        }
-      }
-      user.imageSecond = req.files['imageSecond'][0].filename;
-    }
-
-    // Update the user's information with the data from the request body
-    if (updateData.username) user.username = updateData.username;
-    if (updateData.firstName) user.firstName = updateData.firstName;
-    if (updateData.surname) user.surname = updateData.surname;
-    if (updateData.dob) user.dob = updateData.dob;
-    if (updateData.icNo) user.icNo = updateData.icNo;
-    if (updateData.gender) user.gender = updateData.gender;
-    if (updateData.address) user.address = updateData.address;
-    if (updateData.mobileNo) user.mobileNo = updateData.mobileNo;
-    if (updateData.email) user.email = updateData.email;
-    if (updateData.hospitalName) user.hospitalName = updateData.hospitalName;
-    if (updateData.department) user.department = updateData.department;
-    if (updateData.position) user.position = updateData.position;
-    if (updateData.mmcRegistrationNo) user.mmcRegistrationNo = updateData.mmcRegistrationNo;
-    if (updateData.image) user.image = updateData.image;
-    if (updateData.imageSecond) user.imageSecond = updateData.imageSecond;
-    // Save the updated user data
-    await user.save();
-
-    // You can choose which fields to include in the response
-    const responseData = {
-      image: user.image,
-      imageSecond: user.imageSecond,
-      username: user.username,
-      firstName: user.firstName,
-      surname: user.surname,
-      dob: user.dob,
-      icNo: user.icNo,
-      gender: user.gender,
-      address: user.address,
-      mobileNo: user.mobileNo,
-      email: user.email,
-      hospitalName: user.hospitalName,
-      department: user.department,
-      position: user.position,
-      mmcRegistrationNo: user.mmcRegistrationNo,
-    };
-
-    res.json(responseData);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send({ message: "Server Error" });
-  }
-});
-
-
-app.get('/getStaffInfo/:icNo', async (req, res) => {
-  try {
-    const staffIcNo = req.params.icNo;
-    const staff = await User.findOne({ icNo: staffIcNo });
-
-    if (!staff) {
-      return res.status(404).json({ message: 'Staff not found' });
-    }
-
-    res.json({ staff });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-app.put('/updateStaffInfo/:icNo', upload.fields([
-  { name: 'image', maxCount: 1 },
-  { name: 'imageSecond', maxCount: 1 },
-]), async (req, res) => {
-  try {
-    const staffIcNo = req.params.icNo;
-    const updateData = req.body;
-
-    // Check if 'image' and 'imageSecond' fields are present in the request files
-    
-
-    // Find staff by icNo
-    const staff = await User.findOne({ icNo: staffIcNo });
-
-    if (!staff) {
-      return res.status(404).json({ message: 'Staff not found' });
-    }
-
-    if (req.files && req.files['image']) {
-      if (staff.image) {
-        const existingImagePath = path.join(imagesDirectory, staff.image);
-        if (fs.existsSync(existingImagePath)) {
-          fs.unlinkSync(existingImagePath);
-        }
-      }
-      staff.image = req.files['image'][0].filename;
-    }
-
-    // Check and update 'imageSecond'
-    if (req.files && req.files['imageSecond']) {
-      if (staff.imageSecond) {
-        const existingImageSecondPath = path.join(imagesDirectory, staff.imageSecond);
-        if (fs.existsSync(existingImageSecondPath)) {
-          fs.unlinkSync(existingImageSecondPath);
-        }
-      }
-      staff.imageSecond = req.files['imageSecond'][0].filename;
-    }
-
-
-    // Update staff's information with the data from the request body
-    if (updateData.username) staff.username = updateData.username;
-    if (updateData.firstName) staff.firstName = updateData.firstName;
-    if (updateData.surname) staff.surname = updateData.surname;
-    if (updateData.dob) staff.dob = updateData.dob;
-    if (updateData.icNo) staff.icNo = updateData.icNo;
-    if (updateData.gender) staff.gender = updateData.gender;
-    if (updateData.address) staff.address = updateData.address;
-    if (updateData.mobileNo) staff.mobileNo = updateData.mobileNo;
-    if (updateData.email) staff.email = updateData.email;
-    if (updateData.hospitalName) staff.hospitalName = updateData.hospitalName;
-    if (updateData.department) staff.department = updateData.department;
-    if (updateData.position) staff.position = updateData.position;
-    if (updateData.mmcRegistrationNo) staff.mmcRegistrationNo = updateData.mmcRegistrationNo;
-    if (updateData.image) staff.image = updateData.image;
-    if (updateData.imageSecond) staff.imageSecond = updateData.imageSecond;
-    // ... (add other fields as needed)
-
-    // Save the updated staff data
-    await staff.save();
-
-    // You can choose which fields to include in the response
-    const responseData = {
-      image: staff.image,
-      imageSecond: staff.imageSecond,
-      username: staff.username,
-      firstName: staff.firstName,
-      surname: staff.surname,
-      dob: staff.dob,
-      icNo: staff.icNo,
-      gender: staff.gender,
-      address: staff.address,
-      mobileNo: staff.mobileNo,
-      email: staff.email,
-      hospitalName: staff.hospitalName,
-      department: staff.department,
-      position: staff.position,
-      mmcRegistrationNo: staff.mmcRegistrationNo,
-      // ... (add other fields as needed)
-    };
-
-    res.json(responseData);
-  } catch (err) {
-    console.log(err.message);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-// app.put('/updatePatientInfo/:icNo', upload.fields([
-//   { name: 'profilePic', maxCount: 1 },
-
-// ]), async (req, res) => {
-//   try {
-//     const patientIcNo = req.params.icNo;
-//     const updateData = req.body;
-
-//     // Check if 'image' and 'imageSecond' fields are present in the request files
-//     if (req.files && req.files['image']) {
-//       updateData.profilePic = req.files['image'][0].filename;
-//     }
-   
-    
-
-//     // Find patient by icNo
-//     const patient = await Patient.findOne({ icNo: patientIcNo });
-
-//     if (!patient) {
-//       return res.status(404).json({ message: 'Patient not found' });
-//     }
-
-//     // Update patient's information with the data from the request body
-   
-//     if (updateData.firstName) patient.firstName = updateData.firstName;
-//     if (updateData.surname) patient.surname = updateData.surname;
-//     if (updateData.dob) patient.dob = updateData.dob;
-//     if (updateData.mrnNo) patient.mrnNo = updateData.mrnNo;
-//     if (updateData.icNo) patient.icNo = updateData.icNo;
-//     if (updateData.gender) patient.gender = updateData.gender;
-    
-//     if (updateData.mobileNo) patient.mobileNo = updateData.mobileNo;
-//     if (updateData.email) patient.email = updateData.email;
-//     if (updateData.ethnicity) patient.ethnicity = updateData.ethnicity;
-
-    
-//     if (req.files && req.files['profilePic']) {
-//       updateData.profilePic = req.files['profilePic'][0].filename; // Correct field name
-//     }
-//     if (req.files && req.files['profilePic']) {
-//       patient.profilePic = req.files['profilePic'][0].filename; // Assign to patient model
-//     }
-//     // if (updateData.nextOfKin.firstName) patient.nextOfKin.firstName = updateData.nextOfKin.firstName;
-//     // if (updateData.nextOfKin.surname) patient.nextOfKin.surname = updateData.nextOfKin.surname;
-//     // if (updateData.nextOfKin.mobileNo) patient.nextOfKin.mobileNo = updateData.nextOfKin.mobileNo;
-//     // ... (add other fields as needed)
-
-//     // Save the updated patient data
-//     await patient.save();
-
-//     // You can choose which fields to include in the response
-//     const responseData = {
-//       profilePic: patient.profilePic,
-      
-      
-//       firstName: patient.firstName,
-//       surname: patient.surname,
-//       dob: patient.dob,
-//       icNo: patient.icNo,
-//       gender: patient.gender,
-//       address: patient.address,
-//       mobileNo: patient.mobileNo,
-//       email: patient.email,
-//       ethnicity: patient.ethnicity,
-//      nextOfKin:{
-//       firstName:patient.nextOfKin.firstName,
-//       surname:patient.nextOfKin.surname,
-//       mobileNo: patient.nextOfKin.mobileNo
-//      }
-//       // ... (add other fields as needed)
-//     };
-
-//     res.json(responseData);
-//   } catch (err) {
-//     console.log(err.message);
-//     console.log(err);
-//     res.status(500).json({ message: 'Internal Server Error' });
-//   }
-// });
-
-app.put('/updatePatientInfo/:icNo', upload.fields([
-  { name: 'profilePic', maxCount: 1 }
-]), async (req, res) => {
-  try {
-    const patientIcNo = req.params.icNo;
-    let updateData = req.body;
-
-    // Find patient by icNo
-    const patient = await Patient.findOne({ icNo: patientIcNo });
-
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient not found' });
-    }
-
-    // Update patient's information with the data from the request body
-   
-    // Check if profilePic field is present in the request files
-    if (req.files && req.files['profilePic']) {
-      if (patient.profilePic) {
-        const existingFilePath = path.join(imagesDirectory, patient.profilePic);
-        if (fs.existsSync(existingFilePath)) {
-          fs.unlinkSync(existingFilePath);
-        }
-      }
-      patient.profilePic = req.files['profilePic'][0].filename;
-    }
-
-    patient.firstName = updateData.firstName || patient.firstName;
-    patient.surname = updateData.surname || patient.surname;
-    patient.dob = updateData.dob || patient.dob;
-    patient.mrnNo = updateData.mrnNo || patient.mrnNo;
-    patient.icNo = updateData.icNo || patient.icNo;
-    patient.gender = updateData.gender || patient.gender;
-    patient.mobileNo = updateData.mobileNo || patient.mobileNo;
-    patient.email = updateData.email || patient.email;
-    patient.ethnicity = updateData.ethnicity || patient.ethnicity;
-    patient.nextOfKin.firstName = updateData.nextOfKin.firstName || patient.nextOfKin.firstName;
-    patient.nextOfKin.surname = updateData.nextOfKin.surname || patient.nextOfKin.surname;
-    patient.nextOfKin.mobileNo = updateData.nextOfKin.mobileNo || patient.nextOfKin.mobileNo;
-
-    // Save the updated patient data
-    await patient.save();
-
-    // Prepare and send response data
-    const responseData = {
-      profilePic: patient.profilePic,
-      firstName: patient.firstName,
-      surname: patient.surname,
-      dob: patient.dob,
-      icNo: patient.icNo,
-      mrnNo: patient.mrnNo,
-      gender: patient.gender,
-      address: patient.address,
-      mobileNo: patient.mobileNo,
-      email: patient.email,
-      ethnicity: patient.ethnicity,
-      nextOfKin:{
-        firstName: patient.nextOfKin.firstName,
-        surname: patient.nextOfKin.surname,
-        mobileNo: patient.nextOfKin.mobileNo,
-      }
-      // other fields...
-    };
-
-    res.json(responseData);
-  } catch (err) {
-    console.log(err.message);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
 
 mongoose
   .connect(mongoDBURL, {
