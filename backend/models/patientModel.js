@@ -36,6 +36,14 @@ const patientSchema = new mongoose.Schema({
           fourteenDayWarning: { type: Boolean, default: false },
           expired: { type: Boolean, default: false }
         },
+        pushnotificationSent: {
+          fourteenDayWarning: { type: Boolean, default: false },
+          expired: { type: Boolean, default: false }
+        },
+        smsnotificationSent: {
+          fourteenDayWarning: { type: Boolean, default: false },
+          expired: { type: Boolean, default: false }
+        },
       },
     ],
   });

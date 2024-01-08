@@ -5,9 +5,14 @@ import mongoose from "mongoose";
 const RemovedStentSchema = new mongoose.Schema({
     caseId: String,
     laterality: String,
-    removealDate: Date,
+    removalDate: Date,
    removalLocation: String,
+   mrnNo:String,
     removedBy: String,
+    timestamp: {
+      type: Date,
+      default: Date.now
+    },
    
   });
   

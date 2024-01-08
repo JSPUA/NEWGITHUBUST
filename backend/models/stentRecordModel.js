@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 
 const stentRecordSchema = new mongoose.Schema({
-  caseID: String,
+  patientId: String,
+  
   mrnNo: { type: String, ref: 'Patient' },
   icNo: { type: String, ref: 'Patient' },
   firstName: { type: String, ref: 'Patient' },
@@ -10,7 +11,7 @@ const stentRecordSchema = new mongoose.Schema({
   email: { type: String, ref: 'Patient' },
   stentData: [
     {
-     
+      caseId:String,
       laterality: String,
       hospitalName: String,
       insertedDate: Date,
