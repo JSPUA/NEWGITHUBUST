@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Button, Modal, Form, Navbar, Nav,Image } from 'react-bootstrap';
 import 'bootstrap/dist/css/bootstrap.min.css';
-
+import Navbars from './Navbar';
 function RolePermissions() {
     const [roles, setRoles] = useState([]);
     const [selectedRoleName, setSelectedRoleName] = useState('');
     const [permissions, setPermissions] = useState([]);
     const [showModal, setShowModal] = useState(false);
-    const allPermissions = ['addPatient', 'viewPatient', 'editPatient', 'deletePatient', 'addStent', 'viewResearch', 'addResearch','contactDR','myStentRecord'];
+    const allPermissions = ['addPatient', 'viewPatient', 'editPatient', 'deletePatient', 'addStent', 'viewResearch', 'addResearch','contactDR','myStentRecord','setRole','viewDailyReport','viewSpecificTimeReport','viewFurtherReport'];
     const [selectedHospital, setSelectedHospital] = useState('Hospital A');
     const hospitals = ['Hospital A', 'Hospital B', 'Hospital C']; // Add your list of hospitals
   
@@ -62,7 +62,7 @@ function RolePermissions() {
 
     return (
         <div>
-            <Navbar bg="light"  expand="lg">
+            {/* <Navbar bg="light"  expand="lg">
                 <Navbar.Brand href="#"><Image src="./MML.png" alt="Logo" fluid style={{ width: '100px', height: 'auto' }} /></Navbar.Brand>
                 <Navbar.Toggle aria-controls="basic-navbar-nav" />
                 <Navbar.Collapse id="basic-navbar-nav">
@@ -77,7 +77,7 @@ function RolePermissions() {
                         {isPermissionInRole('addResearch') && <Nav.Link href="/uploadPDF">Add Research</Nav.Link>}
                         {isPermissionInRole('contactDR') && <Nav.Link href="/uploadPDF">Contact DR</Nav.Link>}
                         {isPermissionInRole('myStentRecord') && <Nav.Link href="/uploadPDF">My Stent Record</Nav.Link>}
-                        {/* Add other navigation links based on permissions */}
+                       
                     </Nav>
                     <div className="d-flex align-items-center">
   <span className="mr-2">Hospital:</span>
@@ -91,8 +91,8 @@ function RolePermissions() {
   </Form.Control>
 </div>
                 </Navbar.Collapse>
-            </Navbar>
-
+            </Navbar> */}
+           <Navbars/>
             <h1 >Role and Permissions</h1>
             <div >
                 <Form.Group controlId="roleSelect">
