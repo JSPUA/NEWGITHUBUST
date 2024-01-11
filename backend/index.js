@@ -56,21 +56,21 @@ app.use(
   app.listen(PORT, () => {
     console.log(`App is listening to port: ${PORT}`);
    //setInterval( checkStentsAndSendNotificationss,1000);
-    cron.schedule('* * * * *', checkStentsAndSendEmails);
+    cron.schedule('1 1  * * *', checkStentsAndSendEmails);
    
      cron.schedule('27 18 * * *', checkStentsAndSendNotificationss);
     //  cron.schedule('* * * * *', sendPush);
      
-     cron.schedule('48 19 * * *', async () => {
-      try {
-        const result = await sendSMS();
-        console.log('Stent expiration message sent. Result:', result);
-      } catch (error) {
-        console.error('Error sending stent expired message. Error:', error);
-      }
+    //  cron.schedule('1 1 * * *', async () => {
+    //   try {
+    //     const result = await sendSMS();
+    //     console.log('Stent expiration message sent. Result:', result);
+    //   } catch (error) {
+    //     console.error('Error sending stent expired message. Error:', error);
+    //   }
   
   
-    });
+    // });
   
     cron.schedule('0 8 * * *', async () => {
       const patientId = '...'; // Set the patient's ID or use another identifier
@@ -113,6 +113,9 @@ function formatDate(isoDate) {
 //sendSMS 
 //==================================================================================================================
   function sendSMS(toNumber, messageBody) {
+    if (!toNumber) {
+      return Promise.reject(`The 'toNumber' parameter is missing or invalid:${toNumber}`);
+  }
     return new Promise((resolve, reject) => {
       client.messages
         .create({
@@ -188,15 +191,15 @@ if(stent.smsnotificationSent.fourteenDayWarning||stent.smsnotificationSent.expir
   };
 
 //sendSMS
-app.post('/sendSMS', async (req, res) => {
-    try {
-      const result = await sendSMS();
-      res.status(200).json({ message: result });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Error sending stent expired message" });
-    }
-  });
+// app.post('/sendSMS', async (req, res) => {
+//     try {
+//       const result = await sendSMS();
+//       res.status(200).json({ message: result });
+//     } catch (error) {
+//       console.error(error);
+//       res.status(500).json({ message: "Error sending stent expired message" });
+//     }
+//   });
 
 //======================================================================================================================
   
@@ -1406,6 +1409,52 @@ app.get('/dailyStentStatus', async (req, res) => {
   }
 });
 
+app.get('/all-dailyStentStatus', async (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  try {
+    const patients = await Patient.find({  });
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setDate(end.getDate() + 1); // Include end date
+
+    let dailyStentStatusCounts = [];
+
+    for (let day = new Date(start); day < end; day.setDate(day.getDate() + 1)) {
+      let stentStatusCounts = {
+        date: day.toISOString().split('T')[0],
+        active: 0,
+        due: 0,
+        expired: 0
+      };
+
+      patients.forEach(patient => {
+        patient.stentData.forEach(stent => {
+         
+            const dueDate = calculateDueDate2(stent.insertedDate, stent.dueDate);
+            const status = getStentStatus(stent.insertedDate,day, new Date(dueDate));
+
+            if (status === 'active') {
+              stentStatusCounts.active++;
+            } else if (status === 'due') {
+              stentStatusCounts.due++;
+            } else if (status === 'expired') {
+              stentStatusCounts.expired++;
+            }
+          
+        });
+      });
+
+      dailyStentStatusCounts.push(stentStatusCounts);
+    }
+
+    res.json({ dailyStentStatusCounts });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 
 app.get('/daily-count', async (req, res) => {
   const { hospitalName, startDate } = req.query;
@@ -1494,6 +1543,82 @@ app.get('/daily-count', async (req, res) => {
   }
 });
 
+app.get('/all-daily-count', async (req, res) => {
+  const { startDate } = req.query;
+
+  try {
+      const start = new Date(startDate);
+      const end = new Date(startDate);
+      end.setDate(end.getDate() + 1); // Move to the next day
+
+      let newStentCount = 0;
+      let replacedStentCount = 0;
+      let removedStentCount = 0;
+      let expireStent = 0;
+
+      // Count new stents
+      const newStents = await StentRecord.find({
+          'stentData.insertedDate': { $gte: start, $lt: end }
+      });
+      newStents.forEach(stent => {
+          stent.stentData.forEach(data => {
+              if (data.insertedDate >= start && data.insertedDate < end) {
+                  newStentCount++;
+              }
+          });
+      });
+
+      // Count replaced stents
+      const replacedStents = await replaceStentModel.find({
+          'removedStent.removalDate': { $gte: start, $lt: end }
+      });
+      replacedStents.forEach(stent => {
+          if (stent.removedStent.removalDate >= start && stent.timestamp < end) {
+              replacedStentCount++;
+          }
+      });
+
+      // Count removed stents
+      const removedStents = await RemovedStent.find({
+          'removalDate': { $gte: start, $lt: end }
+      });
+      removedStents.forEach(stent => {
+          if (stent.removalDate >= start && stent.timestamp < end) {
+              removedStentCount++;
+          }
+      });
+
+      // Count expired stents
+      const patients = await Patient.find();
+      patients.forEach(patient => {
+          let hasExpiredStent = false;
+          patient.stentData.forEach(stent => {
+              const dueDate = calculateDueDate2(stent.insertedDate, stent.dueDate);
+              const status = getStentStatus(stent.insertedDate, new Date(), new Date(dueDate));
+              if (status === 'expired') {
+                  hasExpiredStent = true;
+              }
+          });
+
+          if (hasExpiredStent) {
+              expireStent++;
+          }
+      });
+
+      res.json({
+          newStentCount,
+          replacedStentCount,
+          removedStentCount,
+          expireStent
+      });
+  } catch (error) {
+      console.log(error);
+      res.status(500).send('Server error');
+  }
+});
+
+
+
 app.get('/range-count', async (req, res) => {
   const { hospitalName, startDate, endDate } = req.query;
 
@@ -1561,6 +1686,83 @@ app.get('/range-count', async (req, res) => {
       });
     }
     console.log({ hospitalName, startDate, endDate });
+    console.log({ start, end });
+    console.log(dailyCounts);
+
+    res.json(dailyCounts);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send('Server error');
+  }
+});
+
+app.get('/all-range-count', async (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  try {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setDate(end.getDate() + 1); // Include the end date in the range
+
+    let dailyCounts = [];
+
+    for (let date = new Date(start); date < end; date.setDate(date.getDate() + 1)) {
+      let newStentCount = 0;
+      let replacedStentCount = 0;
+      let removedStentCount = 0;
+
+      let dayStart = new Date(date);
+      let dayEnd = new Date(date);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+
+      // Count new stents for the day
+      const newStents = await StentRecord.find({
+       
+        'stentData.insertedDate': { $gte: dayStart, $lt: dayEnd }
+      });
+      // ... (Similar logic as in your previous code for counting newStents)
+      newStents.forEach(stent => {
+        stent.stentData.forEach(data => {
+            if ( data.insertedDate >= start && data.insertedDate < end) {
+             
+              newStentCount++;
+            }
+        });
+    });
+
+      // Count replaced stents for the day
+      const replacedStents = await replaceStentModel.find({
+        
+        'removedStent.removalDate': { $gte: dayStart, $lt: dayEnd }
+      });
+      // ... (Similar logic as in your previous code for counting replacedStents)
+      replacedStents.forEach(stent => {
+        if ( stent.removedStent.removalDate >= start && stent.timestamp < end) {
+            replacedStentCount++;
+        }
+    });
+
+      // Count removed stents for the day
+      const removedStents = await RemovedStent.find({
+      
+        'removalDate': { $gte: dayStart, $lt: dayEnd }
+      });
+      // ... (Similar logic as in your previous code for counting removedStents)
+      removedStents.forEach(stent => {
+        if ( stent.removalDate >= start && stent.timestamp < end) {
+            removedStentCount++;
+        }
+    });
+
+      // Push daily count to the array
+      dailyCounts.push({
+        date: dayStart.toISOString().split('T')[0], // Format the date as 'YYYY-MM-DD'
+        newStentCount,
+        replacedStentCount,
+        removedStentCount
+      });
+    }
+    console.log({ startDate, endDate });
     console.log({ start, end });
     console.log(dailyCounts);
 
@@ -2392,6 +2594,28 @@ app.get('/stent-logs', async (req, res) => {
 
       const logs = await StentLog.find({
           hospitalName: hospitalName,
+          timestamp: { $gte: startOfDay, $lte: endOfDay }
+      }).sort({ timestamp: -1 }); // Sorting by timestamp in descending order
+console.log(logs);
+      res.json(logs);
+  } catch (error) {
+      console.error(error);
+      res.status(500).send('Server error');
+  }
+});
+
+app.get('/all-stent-logs', async (req, res) => {
+  const { startDate } = req.query;
+
+  try {
+      const startOfDay = new Date(startDate);
+      startOfDay.setHours(0, 0, 0, 0); // Set to the start of the day
+
+      const endOfDay = new Date(startDate);
+      endOfDay.setHours(23, 59, 59, 999); // Set to the end of the day
+
+      const logs = await StentLog.find({
+          
           timestamp: { $gte: startOfDay, $lte: endOfDay }
       }).sort({ timestamp: -1 }); // Sorting by timestamp in descending order
 console.log(logs);
