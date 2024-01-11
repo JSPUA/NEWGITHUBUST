@@ -4,6 +4,8 @@ import { Card, Container, Row, Col, Table, Button, Form, InputGroup, Modal, Badg
 import { BsInfoCircle, BsSearch } from 'react-icons/bs';
 import { MdOutlineDelete, MdOutlineEdit, MdOutlineInfo, MdOutlineSearch, MdOutlineEmail } from 'react-icons/md';
 import { Link, useLocation,useNavigate } from 'react-router-dom';
+import { useSelector, useDispatch } from 'react-redux';
+import { setUser } from '../pages/userAction.js';
 
 function formatDate(isoDate) {
   if (!isoDate) {
@@ -26,6 +28,7 @@ function HospitalUserList() {
   const [lastMrnNo, setLastMrnNo] = useState(0);
   const location = useLocation();
   const hospitalName = location.state.hospitalName;
+  const { icNo, activeTab } = useSelector((state) => state.user);
  const navigate = useNavigate();
   useEffect(() => {
 
@@ -104,6 +107,7 @@ function HospitalUserList() {
 
   return (
     <div>
+      <div>{icNo}</div>
       <Container>
         <Row className="mt-3 mb-3">
           <Col md={7}>
