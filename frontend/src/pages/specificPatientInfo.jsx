@@ -165,7 +165,7 @@ function PatientDetails() {
               <div className="form-group">
                 <label>Mobile No:</label>
                 <input
-                  type="number"
+                  type="text"
                   placeholder="Enter Mobile No"
                   name="mobileNo"
                   value={patient.mobileNo}
@@ -236,7 +236,7 @@ function PatientDetails() {
               <div className="form-group">
                 <label>Next of Kin Mobile No:</label>
                 <input
-                  type="number"
+                  type="text"
                   placeholder="Enter Next of Kin Mobile No"
                   name="nextOfKinMobileNo"
                   value={patient.nextOfKin.mobileNo}
