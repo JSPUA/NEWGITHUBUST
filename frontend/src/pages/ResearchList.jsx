@@ -4,6 +4,9 @@ import { Card, Container, Row, Col, Button, Modal, Form,InputGroup } from 'react
 import { Link } from 'react-router-dom';
 import { MdOutlineDelete, MdOutlineEdit,MdOutlineSearch,MdOutlineAdd } from 'react-icons/md';
 import { BsInfoCircle, BsSearch } from 'react-icons/bs';
+import { useSelector, useDispatch } from 'react-redux';
+import { setUser } from '../pages/userAction.js';
+import Navbars from '../pages/Navbar.jsx'
 
 function ResearchList() {
   const [pdfData, setPDFData] = useState([]);
@@ -15,6 +18,16 @@ function ResearchList() {
   const [pdfFile, setPdfFile] = useState(null);
   const [pictureFile, setPictureFile] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const { icNo, activeTab } = useSelector((state) => state.user);
+
+
+  if (!icNo || !activeTab) {
+    console.log("Either icNo or activeTab or both are empty");
+    // Handle the case where they are empty
+  } else {
+    console.log(`icNo: ${icNo}, activeTab: ${activeTab}`);
+    // Continue with your logic as they are not empty
+  }
 
   const handlePdfFileUpload = (event) => {
     const file = event.target.files[0];
@@ -149,7 +162,8 @@ function ResearchList() {
 
   return (
     <div style={{ backgroundImage: "linear-gradient(#00d5ff,#0095ff,rgba(93,0,255,.555))", height: "100%"  }} >
-     
+     <div><Navbars/></div>
+
       <Container>
       <Row className="mt-3 mb-3">
         <Col md={7}>
