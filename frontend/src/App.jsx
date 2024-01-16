@@ -50,9 +50,16 @@ import YourComponent from './pages/Navbarwithdropdwon'
 import UpdateUser from './pages/UpdateUser'
 import ProfileInfo from './pages/ProfileInfo'
 import ProfileEdit from './pages/ProfileEdit'
+import Example from './pages/Chart'
+import DailyCount from './pages/DailyCount'
+import SpecificTimeReport from './pages/SpecificTimeReport'
+import { Provider } from 'react-redux';
+import store from './pages/store.js'
+import ParentDaily from './pages/ParentDaily.jsx'
 
 const App = () => {
   return (
+    <Provider store={store}>
     <Routes>
       <Route path='/' element={<Home/>}/>
       <Route path='/mainPage' element={<MainPage/>}/>
@@ -107,7 +114,12 @@ const App = () => {
       <Route path="/superAdmin" element={<YourComponent/>} />
       <Route path="/profileInfo" element={<ProfileInfo/>} />
       <Route path="/profileInfo/edit" element={<ProfileEdit/>} />
+      <Route path="/chart" element={<Example/>} />
+      <Route path="/dailyCount" element={<DailyCount/>} />
+      <Route path="/specificDateCount" element={<SpecificTimeReport/>} />
+      <Route path="/pd" element={<ParentDaily/>} />
     </Routes>
+    </Provider>
   )
 }
 
