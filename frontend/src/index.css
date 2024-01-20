@@ -114,4 +114,20 @@
   .block-label {
     margin-left: 5px;
   }
+
+    body {
+      background-color:#f7f7f7;
+      margin: 0;
+      padding: 0;
+    }
+
+    h1, h2, h3, h4, h5{
+      color: #3b5998;
+      padding: 1px 5px;
+    }
+
+    
+
+
+        
  
