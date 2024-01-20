@@ -1,16 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import Table from 'react-bootstrap/Table';
-import { AiOutlineEdit } from 'react-icons/ai';
-import { BsInfoCircle, BsSearch } from 'react-icons/bs';
-import { MdOutlineDelete,MdOutlineAdd } from 'react-icons/md';
-import { Link } from 'react-router-dom';
-import { Container, Row, Col, Form, InputGroup, Modal, Button } from 'react-bootstrap';
-import { useSnackbar } from 'notistack'
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import Table from "react-bootstrap/Table";
+import { AiOutlineEdit } from "react-icons/ai";
+import { BsInfoCircle, BsSearch } from "react-icons/bs";
+import { MdOutlineDelete, MdOutlineAdd } from "react-icons/md";
+import { Link } from "react-router-dom";
+import {
+  Container,
+  Row,
+  Col,
+  Form,
+  InputGroup,
+  Modal,
+  Button,
+} from "react-bootstrap";
+import { useSnackbar } from "notistack";
+import { useNavigate, useParams } from "react-router-dom";
 
 const TableWithSearch = () => {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [data, setData] = useState([]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
@@ -23,25 +31,32 @@ const TableWithSearch = () => {
 
   const fetchData = async () => {
     try {
-      const response = await axios.get('http://localhost:5555/get-image');
-      setData(response.data.data);
+      const response = await axios.get(
+        "http://localhost:5555/api/userRegistration/"
+      );
+      setData(response.data);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error("Error fetching data:", error);
     }
   };
 
-  const filteredData = data.filter((item) =>
-    item.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.surname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.icNo.toString().includes(searchTerm) ||
-    item.gender.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.mobileNo.toString().includes(searchTerm) ||
-    item.hospitalName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.mmcRegistrationNo.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredData = data
+    ? data.filter(
+        (item) =>
+          item.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.surname.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.icNo.toString().includes(searchTerm) ||
+          item.gender.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.mobileNo.toString().includes(searchTerm) ||
+          item.hospitalName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.mmcRegistrationNo
+            .toLowerCase()
+            .includes(searchTerm.toLowerCase())
+      )
+    : [];
 
   const handleDeleteClick = (item) => {
     setItemToDelete(item);
@@ -55,13 +70,13 @@ const TableWithSearch = () => {
       .delete(`http://localhost:5555/get-image/${itemToDelete._id}`)
       .then(() => {
         setLoading(false);
-        enqueueSnackbar('Item Deleted Successfully', { variant: 'success' });
+        enqueueSnackbar("Item Deleted Successfully", { variant: "success" });
         window.location.reload();
         setShowDeleteModal(false); // Close the delete confirmation modal
       })
       .catch((error) => {
         setLoading(false);
-        enqueueSnackbar('Error', { variant: 'error' });
+        enqueueSnackbar("Error", { variant: "error" });
         console.log(error);
         setShowDeleteModal(false); // Close the delete confirmation modal
       });
@@ -77,7 +92,7 @@ const TableWithSearch = () => {
     <Container>
       <Row className="mt-3 mb-3">
         <Col md={7}>
-          <h1>USER APPLICATION APPROVAL</h1>
+          <h2>USER APPLICATION APPROVAL</h2>
         </Col>
         <Col md={5} className="d-flex justify-content-end">
           <InputGroup className="mb-3">
@@ -127,18 +142,14 @@ const TableWithSearch = () => {
                   <td>{item.position}</td>
                   <td>{item.mmcRegistrationNo}</td>
                   <td className="text-center">
-                  <Link key={item._id} to={`/get-image/details/${item._id}`}>
-                    <Button  variant='primary'
-                     className="transparent-button" >
-                    <BsInfoCircle className="blue-icon icon-large" />
-                    </Button>
-                    
-                        
-                      
+                    <Link key={item._id} to={`/get-image/details/${item._id}`}>
+                      <Button variant="primary" className="transparent-button">
+                        <BsInfoCircle className="blue-icon icon-large" />
+                      </Button>
                     </Link>
                     <Button
-                    variant='danger'
-                     className="transparent-button" 
+                      variant="danger"
+                      className="transparent-button"
                       onClick={() => handleDeleteClick(item)}
                     >
                       <MdOutlineDelete className="red-icon icon-large" />
@@ -169,10 +180,12 @@ const TableWithSearch = () => {
         </Modal.Footer>
       </Modal>
       <div className="d-flex justify-content-end ml-auto">
-  <Link to="/upload">
-    <Button variant="primary"><MdOutlineAdd/></Button>
-  </Link>
-</div>
+        <Link to="/upload">
+          <Button variant="primary">
+            <MdOutlineAdd />
+          </Button>
+        </Link>
+      </div>
     </Container>
   );
 };

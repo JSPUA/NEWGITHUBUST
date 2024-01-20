@@ -1,0 +1,27 @@
+const express = require("express");
+const {
+  createApplication,
+  getRegistration,
+  deleteRegistration,
+  upload,
+} = require("../controller/userRegistrationController");
+
+const router = express.Router();
+
+//GET all application
+router.get("/", getRegistration);
+
+//POST new application
+router.post(
+  "/",
+  upload.fields([
+    { name: "photo", maxCount: 1 },
+    { name: "apc", maxCount: 1 },
+  ]),
+  createApplication
+);
+
+//DELETE application
+router.delete("/:id", deleteRegistration);
+
+module.exports = router;

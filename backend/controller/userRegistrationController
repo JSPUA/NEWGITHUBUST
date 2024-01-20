@@ -1,0 +1,100 @@
+const Registration = require("../model/UserRegistrationModel");
+const mongoose = require("mongoose");
+const multer = require("multer");
+
+//get all application
+const getRegistration = async (req, res) => {
+  const registration = await Registration.find({}).sort({ createdAt: -1 });
+
+  res.status(200).json(registration);
+};
+
+//upload photo & apc certificate
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/");
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, file.fieldname + "-" + uniqueSuffix);
+  },
+});
+
+const upload = multer({ storage: storage });
+
+//create new application (post)
+const createApplication = async (req, res) => {
+  const {
+    userName,
+    firstName,
+    surname,
+    dob,
+    icNo,
+    gender,
+    address,
+    mobileNo,
+    email,
+    hospitalName,
+    department,
+    position,
+    mmcRegistrationNo,
+  } = req.body;
+
+  try {
+    const registration = new Registration({
+      userName,
+      firstName,
+      surname,
+      dob,
+      icNo,
+      gender,
+      address,
+      mobileNo,
+      email,
+      hospitalName,
+      department,
+      position,
+      mmcRegistrationNo,
+    });
+
+    if (req.files && req.files["photo"]) {
+      registration.photo = req.files["photo"][0].path;
+    }
+
+    if (req.files && req.files["apc"]) {
+      registration.apc = req.files["apc"][0].path;
+    }
+
+    // Save the registration data to the database
+    await registration.save();
+
+    // Respond with the saved registration data
+    res.status(200).json(registration);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+//delete an application
+const deleteRegistration = async (req, res) => {
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(404).json({ error: "ID not found" });
+  }
+
+  const registration = await Registration.findOneAndDelete({ _id: id });
+
+  if (!registration) {
+    return res.status(404).json({ error: "Application not found" });
+  }
+
+  res.status(200).json(registration);
+};
+
+module.exports = {
+  createApplication,
+  getRegistration,
+  deleteRegistration,
+  upload,
+};

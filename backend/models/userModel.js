@@ -18,6 +18,7 @@ const UserSchema = new mongoose.Schema(
     position: String,
     mmcRegistrationNo: String,
     password: String,
+    resetPassword: Boolean,
   },
   {
     collection: "User", // You can keep the collection name as "Signup"

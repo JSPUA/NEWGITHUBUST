@@ -1,80 +1,101 @@
-import React, { useState } from 'react';
-import { Form, Button, Container, Row, Col, Alert, Image, Card,Tabs,Tab } from 'react-bootstrap';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faAngleLeft, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
-import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { useDispatch } from 'react-redux';
-import { setUser } from '../pages/userAction.js';
+import React, { useState } from "react";
+import {
+  Form,
+  Button,
+  Container,
+  Row,
+  Col,
+  Alert,
+  Image,
+  Card,
+  Tabs,
+  Tab,
+} from "react-bootstrap";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faAngleLeft,
+  faEye,
+  faEyeSlash,
+} from "@fortawesome/free-solid-svg-icons";
+import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
+import { useDispatch } from "react-redux";
+import { setUser } from "../pages/userAction.js";
 
 function LoginForm() {
-
-//new
-const [email, setEmail] = useState('');
-  const [icNo, setIcNo] = useState('');
-  const [password, setPassword] = useState('');
+  //new
+  const [email, setEmail] = useState("");
+  const [icNo, setIcNo] = useState("");
+  const [password, setPassword] = useState("");
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('staff');
+  const [activeTab, setActiveTab] = useState("staff");
   const dispatch = useDispatch();
   const newhandleSubmit = async (event) => {
     event.preventDefault();
 
     try {
-    const url = activeTab === 'staff' ? 'http://localhost:5555/staffLogin' : 'http://localhost:5555/login';
-    const response = await axios.post(url, {
+      const url =
+        activeTab === "staff"
+          ? "http://localhost:5555/staffLogin"
+          : "http://localhost:5555/login";
+      const response = await axios.post(url, {
         email,
         password,
         icNo,
       });
 
       if (response.data.success) {
-
-        console.log('Login Success');
+        console.log("Login Success");
         const userIcNo = response.data.icNo;
-        const userActiveTab =activeTab;
-        alert('Login successful!');
+        const userActiveTab = activeTab;
+        alert("Login successful!");
 
         dispatch(setUser({ icNo: userIcNo, activeTab: userActiveTab }));
 
-         if (activeTab === 'staff') {
-      // Make request for staff data
-      const staffResponse = await axios.get(`http://localhost:5555/getStaffByEmail/${icNo}`);
-      console.log('Staff data:', staffResponse.data.staff);
-    } else {
-      // Make request for patient data
-      const patientResponse = await axios.get(`http://localhost:5555/getPatientByEmail/${icNo}`);
-      console.log('Patient data:', patientResponse.data.patient);
-    }
+        if (activeTab === "staff") {
+          // Make request for staff data
+          const staffResponse = await axios.get(
+            `http://localhost:5555/getStaffByEmail/${icNo}`
+          );
+          console.log("Staff data:", staffResponse.data.staff);
+        } else {
+          // Make request for patient data
+          const patientResponse = await axios.get(
+            `http://localhost:5555/getPatientByEmail/${icNo}`
+          );
+          console.log("Patient data:", patientResponse.data.patient);
+        }
         // Assuming the response has a token
         const { token } = response.data;
 
         // Store the token securely (e.g., in an HTTP-only cookie)
         // For simplicity, let's use local storage in this example
-        localStorage.setItem('authToken', token);
+        localStorage.setItem("authToken", token);
 
         // Redirect to home page
-        navigate('/mainPage',{
-            state: {
-                activeTab: userActiveTab,
-                icNo: userIcNo,
-              
-                // Add more properties as needed
-            }});
+        navigate("/mainPage", {
+          state: {
+            activeTab: userActiveTab,
+            icNo: userIcNo,
+
+            // Add more properties as needed
+          },
+        });
       } else {
-        alert('Incorrect email or password! Please try again.');
+        alert("Incorrect email or password! Please try again.");
         console.log(icNo);
         console.log(password);
       }
     } catch (error) {
-      console.error('Error during login:', error);
+      console.error("Error during login:", error);
     }
   };
 
-//new
- 
+  //new
+
   const [formData, setFormData] = useState({
-    firstName: '',
-    password: '',
+    firstName: "",
+    password: "",
     showError: false,
     showPassword: false,
   });
@@ -99,18 +120,18 @@ const [email, setEmail] = useState('');
 
     const { firstName, password } = formData;
     try {
-      const response = await axios.post(`http://localhost:5555/api/login/${firstName}`, {
-      
-        password,
-      });
+      const response = await axios.post(
+        `http://localhost:5555/api/login/${firstName}`,
+        {
+          password,
+        }
+      );
 
       if (response.status === 200) {
         // Successful login
-        alert('Login successful');
+        alert("Login successful");
         console.log("Login successful");
-        return (
-          navigate(`/patientPage/${firstName}`) 
-        );
+        return navigate(`/patientPage/${firstName}`);
       } else {
         // Failed login
         setFormData((prevData) => ({
@@ -120,16 +141,14 @@ const [email, setEmail] = useState('');
         console.log("Login failed");
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error("Error:", error);
       // Handle error as needed
     }
   };
 
-
-
   const linkStyle = {
-    color: 'blue',
-    textDecoration: 'underline',
+    color: "blue",
+    textDecoration: "underline",
   };
   const [isButtonHovered, setIsButtonHovered] = useState(false);
 
@@ -232,32 +251,42 @@ const [email, setEmail] = useState('');
       </Row> */}
 
       <div>
-      <div className="d-flex justify-content-center align-items-center text-center vh-100" style={{ backgroundImage: "linear-gradient(#00d5ff,#0095ff,rgba(93,0,255,.555))" }}>
-        <div className="bg-white p-3 rounded" style={{ width: '40%' }}>
-          <h2 className='mb-3 text-primary'>Login</h2>
-          <Tabs
-            id="login-tabs"
-            activeKey={activeTab}
-            onSelect={(key) => setActiveTab(key)}
-            className="mb-3"
+        <div
+          className="d-flex justify-content-center align-items-center text-center vh-100"
+          style={{}}
+        >
+          <div
+            className="bg-white p-3 rounded"
+            style={{
+              width: "40%",
+              boxShadow: "0 0 10px rgba(0, 0, 0, 0.2)",
+              borderRadius: "20px",
+            }}
           >
-             <Tab eventKey="staff" title="Staff">
-              {/* Content for Staff Login */}
-              <form onSubmit={newhandleSubmit}>
-            <div className="mb-3 text-start">
-              <label htmlFor="exampleInputIC" className="form-label">
-                <strong>IC NO</strong>
-              </label>
-              <input
-                type="text"
-                placeholder="Enter IC No"
-                className="form-control"
-                id="exampleInputIC"
-                onChange={(event) => setIcNo(event.target.value)}
-                required
-              />
-            </div>
-            {/* <div className="mb-3 text-start">
+            <h2 className="mb-3 text-primary">Login</h2>
+            <Tabs
+              id="login-tabs"
+              activeKey={activeTab}
+              onSelect={(key) => setActiveTab(key)}
+              className="mb-3"
+            >
+              <Tab eventKey="staff" title="Staff">
+                {/* Content for Staff Login */}
+                <form onSubmit={newhandleSubmit}>
+                  <div className="mb-3 text-start">
+                    <label htmlFor="exampleInputIC" className="form-label">
+                      <strong>IC NO</strong>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter IC No"
+                      className="form-control"
+                      id="exampleInputIC"
+                      onChange={(event) => setIcNo(event.target.value)}
+                      required
+                    />
+                  </div>
+                  {/* <div className="mb-3 text-start">
               <label htmlFor="exampleInputPassword1" className="form-label">
                 <strong>Password</strong>
               </label>
@@ -270,58 +299,67 @@ const [email, setEmail] = useState('');
                 required
               />
             </div> */}
- <div className="mb-3 text-start">
-      <label htmlFor="exampleInputPassword1" className="form-label">
-        <strong>Password</strong>
-      </label>
-      <div className="input-group">
-        <input
-          type={formData.showPassword ? 'text' : 'password'}
-          placeholder="Enter Password"
-          className="form-control"
-          id="exampleInputPassword1"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          required
-        />
-        <div className="input-group-append">
-          <Button
-            variant="outline-secondary"
-            type="button"
-            onClick={handleTogglePasswordVisibility}
-          >
-            <FontAwesomeIcon
-              icon={formData.showPassword ? faEye : faEyeSlash}
-            />
-          </Button>
-        </div>
-      </div>
-    </div>
-    <p>
-                  <Link to="/forgetpassword" style={linkStyle}>Forgot Password?</Link>
-                </p>
-            <button type="submit" className="btn btn-primary">Login</button>
-          </form>
-          <p className='container my-2'>Don&apos;t have an account?</p>
-          <Link to='/upload' className="btn btn-secondary">Sign Up</Link>
-            </Tab>
-           <Tab eventKey="patient" title="Patient">
-              {/* Content for Patient Login */}
-          <form onSubmit={newhandleSubmit}>
-            <div className="mb-3 text-start">
-              <label htmlFor="exampleInputIC" className="form-label">
-                <strong>IC NO</strong>
-              </label>
-              <input
-                type="text"
-                placeholder="Enter IC No"
-                className="form-control"
-                id="exampleInputIC"
-                onChange={(event) => setIcNo(event.target.value)}
-                required
-              />
-            </div>
-            {/* <div className="mb-3 text-start">
+                  <div className="mb-3 text-start">
+                    <label
+                      htmlFor="exampleInputPassword1"
+                      className="form-label"
+                    >
+                      <strong>Password</strong>
+                    </label>
+                    <div className="input-group">
+                      <input
+                        type={formData.showPassword ? "text" : "password"}
+                        placeholder="Enter Password"
+                        className="form-control"
+                        id="exampleInputPassword1"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        required
+                      />
+                      <div className="input-group-append">
+                        <Button
+                          variant="outline-secondary"
+                          type="button"
+                          onClick={handleTogglePasswordVisibility}
+                        >
+                          <FontAwesomeIcon
+                            icon={formData.showPassword ? faEye : faEyeSlash}
+                          />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  <p>
+                    <Link to="/forgetpassword" style={linkStyle}>
+                      Forgot Password?
+                    </Link>
+                  </p>
+                  <button type="submit" className="btn btn-primary">
+                    Login
+                  </button>
+                </form>
+                <p className="container my-2">Don&apos;t have an account?</p>
+                <Link to="/upload" className="btn btn-secondary">
+                  Sign Up
+                </Link>
+              </Tab>
+              <Tab eventKey="patient" title="Patient">
+                {/* Content for Patient Login */}
+                <form onSubmit={newhandleSubmit}>
+                  <div className="mb-3 text-start">
+                    <label htmlFor="exampleInputIC" className="form-label">
+                      <strong>IC NO</strong>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter IC No"
+                      className="form-control"
+                      id="exampleInputIC"
+                      onChange={(event) => setIcNo(event.target.value)}
+                      required
+                    />
+                  </div>
+                  {/* <div className="mb-3 text-start">
               <label htmlFor="exampleInputPassword1" className="form-label">
                 <strong>Password</strong>
               </label>
@@ -345,46 +383,51 @@ const [email, setEmail] = useState('');
                       </Button>
                     </div>
             </div> */}
- <div className="mb-3 text-start">
-      <label htmlFor="exampleInputPassword1" className="form-label">
-        <strong>Password</strong>
-      </label>
-      <div className="input-group">
-        <input
-          type={formData.showPassword ? 'text' : 'password'}
-          placeholder="Enter Password"
-          className="form-control"
-          id="exampleInputPassword1"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          required
-        />
-        <div className="input-group-append">
-          <Button
-            variant="outline-secondary"
-            type="button"
-            onClick={handleTogglePasswordVisibility}
-          >
-            <FontAwesomeIcon
-              icon={formData.showPassword ? faEye : faEyeSlash}
-            />
-          </Button>
-        </div>
-      </div>
-    </div>
-    <p>
-                  <Link to="/forgetpassword" style={linkStyle}>Forgot Password?</Link>
-                </p>
+                  <div className="mb-3 text-start">
+                    <label
+                      htmlFor="exampleInputPassword1"
+                      className="form-label"
+                    >
+                      <strong>Password</strong>
+                    </label>
+                    <div className="input-group">
+                      <input
+                        type={formData.showPassword ? "text" : "password"}
+                        placeholder="Enter Password"
+                        className="form-control"
+                        id="exampleInputPassword1"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        required
+                      />
+                      <div className="input-group-append">
+                        <Button
+                          variant="outline-secondary"
+                          type="button"
+                          onClick={handleTogglePasswordVisibility}
+                        >
+                          <FontAwesomeIcon
+                            icon={formData.showPassword ? faEye : faEyeSlash}
+                          />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  <p>
+                    <Link to="/forgetpassword" style={linkStyle}>
+                      Forgot Password?
+                    </Link>
+                  </p>
 
-            <button type="submit" className="btn btn-primary">Login</button>
-          </form>
-          </Tab>
-         
-          </Tabs>
-          
+                  <button type="submit" className="btn btn-primary">
+                    Login
+                  </button>
+                </form>
+              </Tab>
+            </Tabs>
+          </div>
         </div>
       </div>
-    </div>
     </div>
   );
 }
