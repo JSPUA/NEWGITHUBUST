@@ -4,6 +4,9 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faAngleLeft, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { useDispatch } from 'react-redux';
+import { setUser } from '../pages/userAction.js';
+
 function LoginForm() {
 
 //new
@@ -12,7 +15,7 @@ const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('staff');
-
+  const dispatch = useDispatch();
   const newhandleSubmit = async (event) => {
     event.preventDefault();
 
@@ -25,12 +28,13 @@ const [email, setEmail] = useState('');
       });
 
       if (response.data.success) {
+
         console.log('Login Success');
         const userIcNo = response.data.icNo;
         const userActiveTab =activeTab;
         alert('Login successful!');
 
-
+        dispatch(setUser({ icNo: userIcNo, activeTab: userActiveTab }));
 
          if (activeTab === 'staff') {
       // Make request for staff data

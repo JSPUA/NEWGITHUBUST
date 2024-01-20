@@ -4,6 +4,8 @@ import { Card, Container, Row, Col, Table, Button, Form, InputGroup, Modal,Badge
 import { BsInfoCircle, BsSearch } from 'react-icons/bs';
 import { MdOutlineDelete, MdOutlineEdit, MdOutlineInfo, MdOutlineSearch, MdOutlineEmail } from 'react-icons/md';
 import { Link,useLocation } from 'react-router-dom';
+import { useSelector, useDispatch } from 'react-redux';
+import { setUser } from '../pages/userAction.js';
 
 function formatDate(isoDate) {
   if (!isoDate) {
@@ -25,6 +27,7 @@ function HospitalPatientList() {
   const [patientToDelete, setPatientToDelete] = useState(null);
   const [lastMrnNo, setLastMrnNo] = useState(0);
   const location = useLocation();
+  const { icNo, activeTab } = useSelector((state) => state.user);
   const hospitalName = location.state.hospitalName;
   useEffect(() => {
     // Fetch patient data when the component mounts
@@ -87,6 +90,7 @@ function HospitalPatientList() {
 
   return (
     <div>
+    
       <Container>
         <Row className="mt-3 mb-3">
           <Col md={7}>

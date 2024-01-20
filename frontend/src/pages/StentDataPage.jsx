@@ -8,6 +8,8 @@ import AnimatedCountdown from "./AnimatedCountdown";
 import { MdOutlineSearch,MdOutlineDelete,MdOutlineCached } from "react-icons/md";
 
 
+
+
 function formatDate(isoDate) {
   if (!isoDate) {
     return '';
@@ -32,7 +34,15 @@ function StentDataPage() {
   const [editedStentData, setEditedStentData] = useState({});
   const [editStentIndex, setEditStentIndex] = useState(null); // Store the stent index to edit
   const [showAddStentModal, setShowAddStentModal] = useState(false);
+  const [showReplaceAddStentModal, setShowReplaceAddStentModal] = useState(false);
+  const [replaceStentId, setReplaceStentId] = useState(null);
+  const [deletedStentIdForReplacement, setDeletedStentIdForReplacement] = useState(null);
+  const [records, setRecords] = useState([]);
+  const [removeRecords, setRemoveRecords] = useState([]);
+  const [replaceRecords, setReplaceRecords] = useState([]);
   const [newStentData, setNewStentData] = useState({
+
+
     caseId: "", 
     mrnNo: '',
     laterality: 'Left',
@@ -83,6 +93,7 @@ function StentDataPage() {
   const [calculatedDueDate, setCalculatedDueDate] = useState('');
   
 
+
   // Define the fetchData function at the component level
   const fetchData = async () => {
     try {
@@ -103,6 +114,59 @@ function StentDataPage() {
     // Call fetchData when the component mounts
     fetchData();
   }, [id]);
+
+  useEffect(() => {
+    if (replaceStentId) {
+      openReplaceAddStentModal();
+    }
+  }, [replaceStentId]);
+
+  useEffect(() => {
+    if (patientData && patientData.mrnNo) 
+    axios.get(`http://localhost:5555/stentRecords/${patientData.mrnNo}`) // Adjust the URL to your API endpoint
+      .then(response => {
+        setRecords(response.data);
+      })
+      .catch(error => {
+        console.error('There was an error fetching the stent records!', error);
+      });
+  }, [patientData]);
+
+
+  useEffect(() => {
+    if (patientData && patientData.mrnNo) 
+    axios.get(`http://localhost:5555/stentRecords/${patientData.mrnNo}`) // Adjust the URL to your API endpoint
+      .then(response => {
+        setRecords(response.data);
+      })
+      .catch(error => {
+        console.error('There was an error fetching the stent records!', error);
+      });
+  }, [patientData]);
+
+
+  useEffect(() => {
+    if (patientData && patientData.mrnNo) 
+    axios.get(`http://localhost:5555/removedStents/${patientData.mrnNo}`) // Adjust the URL to your API endpoint
+      .then(response => {
+        setRemoveRecords(response.data);
+      })
+      .catch(error => {
+        console.error('There was an error fetching the stent records!', error);
+      });
+  }, [patientData]);
+
+  useEffect(() => {
+    if (patientData && patientData.mrnNo) 
+    axios.get(`http://localhost:5555/replaceStents/${patientData.mrnNo}`) // Adjust the URL to your API endpoint
+      .then(response => {
+        setReplaceRecords(response.data);
+      })
+      .catch(error => {
+        console.error('There was an error fetching the stent records!', error);
+      });
+  }, [patientData]);
+
 
   const deleteStent = (stentIndex) => {
     axios
@@ -216,16 +280,21 @@ function StentDataPage() {
   
 
   const openAddStentModal = () => {
-    // const newCaseID = generateUniqueCaseID();
-    // setNewStentData({
-    //   ...newStentData,
-    //   caseId: newCaseID,
-    // });
+   
     setShowAddStentModal(true);
+  };
+
+  const openReplaceAddStentModal = () => {
+   
+    setShowReplaceAddStentModal(true);
   };
 
   const closeAddStentModal = () => {
     setShowAddStentModal(false);
+  };
+
+  const closeReplaceAddStentModal = () => {
+    setShowReplaceAddStentModal(false);
   };
 
   const addStent = () => {
@@ -247,21 +316,50 @@ function StentDataPage() {
       });
   };
 
+  const replaceAddStent = () => {
+    
+    // Make a POST request to add a new stent using newStentData
+    axios
+      .post(`http://localhost:5555/replaceAddStents/${id}`, {
+        newStentData,
+        caseId: deletedStentIdForReplacement  // Send the replaceStentId along with the new stent data
+      })
+      .then((response) => {
+        console.log("Stent record added:", response.data);
+
+        // Close the add stent modal after a successful addition
+        closeAddStentModal();
+
+        // You may want to refresh the stent data on the main page after adding a stent
+        // You can call fetchData or any other function that fetches and updates the stent data.
+        fetchData();
+      })
+      .catch((error) => {
+        console.error("Error adding stent record:", error);
+      });
+  };
+
   const openDeleteModal = (stentIndex) => {
-    setDeleteInfo({
-      caseId: "",
-      removedBy: "",
-      removalDate: "",
-      removalLocation: "",
-      laterality:"",
-    });
+    
+
+    const stentToDelete = patientData.stentData[stentIndex];
+
+    // Set the stent data to state
+    setStentData(stentToDelete);
+  
+    // Set the deleteInfo with the default or existing values
+    setDeleteInfo({ ...deleteInfo, caseId: stentToDelete.caseId, laterality: stentToDelete.laterality });
     setEditStentIndex(stentIndex);
     setShowDeleteModal(true);
   };
 
   const openReplaceDeleteModal = (stentIndex) => {
+
+    const stentToReplace = patientData.stentData[stentIndex];
+    setStentData(stentToReplace);
     setReplaceDeleteInfo({
-      caseId: "",
+      ...replaceDeleteInfo,
+      caseId: stentToReplace.caseId,
       removedBy: "",
       removalDate: "",
       removalLocation: "",
@@ -295,6 +393,78 @@ function StentDataPage() {
   };
   
 
+  // const submitDeleteModal = (stentIndex) => {
+    
+  //   // const stentToRemove = patientData.stentData[editStentIndex];
+  //   // // Delete the stent from the list
+  //   // const updatedStentData = [...patientData.stentData];
+  //   // updatedStentData.splice(editStentIndex, 1);
+  //   // setPatientData({ ...patientData, stentData: updatedStentData });
+
+  //   // // Add the stent information to the "removedStent" collection
+  //   // const removedStentInfo = {
+  //   //   caseId: deleteInfo.caseId,
+  //   //   removedBy: deleteInfo.removedBy,
+  //   //   removalDate: deleteInfo.removalDate,
+  //   //   removalLocation: deleteInfo.removalLocation,
+  //   //   laterality: stentToRemove.laterality, // You can add more properties here
+  //   // };
+
+  //   // // Make a POST request to add the removed stent information
+  //   // axios
+  //   //   .post(`http://localhost:5555/removedStents/${id}`, removedStentInfo)
+  //   //   .then((response) => {
+  //   //     console.log("Removed Stent record added:", response.data);
+
+  //   //     // Close the delete modal after a successful addition
+  //   //     closeDeleteModal();
+  //   //   })
+  //   //   .catch((error) => {
+  //   //     console.error("Error adding removed stent record:", error);
+  //   //   });
+
+
+  //   axios.get(`http://localhost:5555/getPatientById/${id}`)
+  //   .then((response) => {
+  //     const patientData = response.data; // Assuming the response contains patient data
+
+  //     // Check if the specified stent exists
+  //     if (stentIndex >= 0 && stentIndex < patientData.stentData.length) {
+  //       const stentToRemove = patientData.stentData[stentIndex];
+
+  //       // Add the stent information to the "removedStent" collection
+  //       const removedStentInfo = {
+  //         caseId: stentToRemove.caseId,
+  //         removedBy: deleteInfo.removedBy,
+  //         removalDate: deleteInfo.removalDate,
+  //         removalLocation: deleteInfo.removalLocation,
+  //         laterality: stentToRemove.laterality, // You can add more properties here
+  //       };
+
+  //       // Make a POST request to add the removed stent information
+  //       axios.post(`http://localhost:5555/removedStents/${id}`, removedStentInfo)
+  //         .then((response) => {
+  //           console.log("Removed Stent record added:", response.data);
+
+  //           // Optionally, update the local patient data to reflect the removal
+  //           const updatedStentData = patientData.stentData.filter((_, index) => index !== stentIndex);
+  //           setPatientData({ ...patientData, stentData: updatedStentData });
+
+  //           // Close the delete modal after a successful addition
+  //           closeDeleteModal();
+  //         })
+  //         .catch((error) => {
+  //           console.error("Error adding removed stent record:", error);
+  //         });
+  //     } else {
+  //       console.error("Stent not found at the specified index");
+  //     }
+  //   })
+  //   .catch((error) => {
+  //     console.error("Error fetching patient data:", error);
+  //   });
+  // };
+
   const submitDeleteModal = (stentIndex) => {
     const stentToRemove = patientData.stentData[editStentIndex];
     // Delete the stent from the list
@@ -314,6 +484,7 @@ function StentDataPage() {
     // Make a POST request to add the removed stent information
     axios
       .post(`http://localhost:5555/removedStents/${id}`, removedStentInfo)
+      
       .then((response) => {
         console.log("Removed Stent record added:", response.data);
 
@@ -329,6 +500,7 @@ function StentDataPage() {
 
   const submitReplaceDeleteModal = (stentIndex) => {
     const stentToRemove = patientData.stentData[editStentIndex];
+    setDeletedStentIdForReplacement(stentToRemove.caseId);
     // Delete the stent from the list
     const updatedStentData = [...patientData.stentData];
     updatedStentData.splice(editStentIndex, 1);
@@ -345,13 +517,13 @@ function StentDataPage() {
 
     // Make a POST request to add the removed stent information
     axios
-      .post(`http://localhost:5555/removedStents/${id}`, removedStentInfo)
+      .post(`http://localhost:5555/replaceStents/${id}`, removedStentInfo)
       .then((response) => {
-        console.log("Removed Stent record added:", response.data);
-
-        // Close the delete modal after a successful addition
+        
         closeReplaceDeleteModal();
-        openAddStentModal();
+        setReplaceStentId(response.data.replaceStentId);
+        openReplaceAddStentModal();
+     
       })
       .catch((error) => {
         console.error("Error adding removed stent record:", error);
@@ -467,8 +639,10 @@ function StentDataPage() {
 
   return (
     <Container>
+
     <div>
       <h2>Patient Information</h2>
+  
       {patientData && (
         <div>
           <h5>MRN No: {patientData.mrnNo}</h5>
@@ -481,6 +655,7 @@ function StentDataPage() {
       )}
 <br></br>
       <h2>Stent Data</h2>
+      
       
       {patientData.stentData && patientData.stentData.length > 0 ? (
         <Table striped bordered hover>
@@ -500,6 +675,7 @@ function StentDataPage() {
             </tr>
           </thead>
           <tbody>
+         
             {patientData.stentData.map((stent, index) => (
               <tr key={index} className="text-center">
                 <td>{stent.caseId}</td>
@@ -547,7 +723,118 @@ function StentDataPage() {
       )}
 {patientData.stentData.length < 2 && (
             <Button variant="primary" onClick={() => openAddStentModal()}>Add Stent</Button>
+
+            
           )}
+
+<div> <div>
+      <h2>Stent Records</h2>
+      <Table striped bordered hover >
+        <thead>
+          <tr>
+           <th>No</th>
+            <th>Case ID</th>
+            <th>Hospital Name</th>
+            <th>Laterality</th>
+            <th>Inserted Date</th>
+            <th>Duration</th>
+            {/* Add more headers based on the data */}
+          </tr>
+        </thead>
+        <tbody>
+        {records.map((record, index) => {
+      // Sort stentData by insertedDate in descending order
+     
+      return (
+        <tr key={record._id}>
+          <td>{index + 1}</td>
+          <td>{record.stentData.map(stent => stent.caseId).join(', ')}</td>
+          <td>{record.stentData.map(stent => stent.hospitalName).join(', ')}</td>
+          <td>{record.stentData.map(stent => stent.laterality).join(', ')}</td>
+          <td>{record.stentData.map(stent => formatDate(stent.insertedDate)).join(', ')}</td>
+          <td>{record.stentData.map(stent => stent.dueDate).join(', ')}</td>
+          {/* Add more data cells based on the data */}
+        </tr>
+      );
+    })}
+        </tbody>
+      </Table>
+    </div></div>
+
+    <div> <div>
+      <h2>Remove Stent Records</h2>
+      <Table striped bordered hover >
+        <thead>
+          <tr>
+           <th>No</th>
+            <th>Case ID</th>
+            <th>Hospital Name</th>
+            <th>Laterality</th>
+            <th>Remove by</th>
+            <th>Removal Date</th>
+            {/* Add more headers based on the data */}
+          </tr>
+        </thead>
+        <tbody>
+        {removeRecords.map((record, index) => {
+      // Sort stentData by insertedDate in descending order
+     
+      return (
+        <tr key={record._id}>
+          <td>{index + 1}</td>
+          <td>{record.caseId}</td>
+          <td>{record.removalLocation}</td>
+          <td>{record.laterality}</td>
+          <td>{record.removedBy}</td>
+          
+          <td>{formatDate(record.timestamp)}</td>
+          {/* Add more data cells based on the data */}
+        </tr>
+      );
+    })}
+        </tbody>
+      </Table>
+    </div></div>
+
+    <div> <div>
+      <h2>Replace Stent Records</h2>
+      <Table striped bordered hover >
+        <thead>
+          <tr>
+           <th>No</th>
+            <th>Old Case ID</th>
+            {/* <th>New Case ID</th> */}
+            <th>Hospital Name</th>
+            <th>Laterality</th>
+            <th>Remove by</th>
+            <th>Removal Date</th>
+            {/* Add more headers based on the data */}
+          </tr>
+        </thead>
+        <tbody>
+        {replaceRecords.map((record, index) => {
+      // Sort stentData by insertedDate in descending order
+     
+      return (
+        <tr key={record._id}>
+          <td>{index + 1}</td>
+          <td>{record.removedStent.caseId}</td>
+          {/* <td>{record.newStent.caseId}</td> */}
+          <td>{record.removedStent.removalLocation}</td>
+          <td>{record.removedStent.laterality}</td>
+          <td>{record.removedStent.removedBy}</td>
+          
+          
+          <td>{formatDate(record.timestamp)}</td>
+          {/* Add more data cells based on the data */}
+        </tr>
+      );
+    })}
+        </tbody>
+      </Table>
+    </div></div>
+
+
       {/* Modal for show stent info*/ }
       <Modal
   show={isModalOpen}
@@ -1099,14 +1386,311 @@ function StentDataPage() {
   </Modal.Footer>
 </Modal>
 
+  {/*Modal for add stent */}
+  <Modal show={showReplaceAddStentModal} onHide={() => closeReplaceAddStentModal()}  dialogClassName="custom-modal">
+       <Modal.Header closeButton>
+  
+    <Modal.Title>Add Stent</Modal.Title>
+  
+</Modal.Header>
+
+  <Modal.Body>
+    <Form>
+    {/* <div className="text-center">
+    <Image
+      src={`/MML.png`}
+      alt="Logo"
+      fluid
+      style={{ width: '100px', height: 'auto' }}
+      className="float-right"
+    />
+    
+  </div>
+  <br></br> */}
+  <div>Add stent for the replace</div>
+  
+      <div className="row">
+        <div className="col-md-4">
+          <Form.Group>
+            <Form.Label>Case ID</Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="Enter Case ID"
+              value={newStentData.caseId}
+              onChange={(e) =>
+                setNewStentData({
+                  ...newStentData,
+                  caseId: e.target.value,
+                })
+              }
+            />
+          </Form.Group>
+        </div>
+        <div className="col-md-4">
+          <Form.Group>
+            <Form.Label>MRN NO</Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="Enter MRN NO"
+              value={patientData.mrnNo}
+              onChange={(e) =>
+                setNewStentData({
+                  ...newStentData,
+                  mrnNo: e.target.value,
+                })
+              }
+            />
+          </Form.Group>
+        </div>
+        <div className="col-md-4">
+          <Form.Group>
+            <Form.Label>Laterality</Form.Label>
+            <Form.Control
+              as="select"
+              value={newStentData.laterality}
+              onChange={(e) =>
+                setNewStentData({
+                  ...newStentData,
+                  laterality: e.target.value,
+                })
+              }
+            >
+              <option value="Left">Left</option>
+              <option value="Right">Right</option>
+            </Form.Control>
+          </Form.Group>
+        </div>
+      </div>
+<br></br>
+      <div className="row">
+        <div className="col-md-4">
+          <Form.Group>
+            <Form.Label>Hospital Name</Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="Enter Hospital Name"
+              value={newStentData.hospitalName}
+              onChange={(e) =>
+                setNewStentData({
+                  ...newStentData,
+                  hospitalName: e.target.value,
+                })
+              }
+            />
+          </Form.Group>
+        </div>
+        <div className="col-md-4">
+          <Form.Group>
+            <Form.Label>Insert Date</Form.Label>
+            <Form.Control
+              type="date"
+              value={newStentData.insertedDate}
+              onChange={(e) =>
+                setNewStentData({
+                  ...newStentData,
+                  insertedDate: e.target.value,
+                })
+              }
+            />
+          </Form.Group>
+        </div>
+        <div className="col-md-4">
+        <Form.Group>
+  <Form.Label>Due In</Form.Label>
+  <Form.Control
+    as="select"
+    value={newStentData.dueDate}
+    onChange={(e) => {
+      const selectedValue = e.target.value;
+      let days = 0;
+
+      // Calculate the number of days based on the selected option
+      switch (selectedValue) {
+        case '2 weeks':
+          days = 14;
+          break;
+        case '1 month':
+          days = 30;
+          break;
+        case '2 months':
+          days = 60;
+          break;
+        case '3 months':
+          days = 90;
+          break;
+        case '6 months':
+          days = 180;
+          break;
+        case '12 months':
+          days = 365; // Approximated to 365 days for a year
+          break;
+        case 'permanent':
+          days = 0; // You can set this to any specific value for "permanent"
+          break;
+        default:
+          days = 0; // Default to 0 if none of the above options
+      }
+
+      // Update the "dueDate" and "length" fields
+      setNewStentData({
+        ...newStentData,
+        dueDate: selectedValue,
+        Due: days.toString(),
+      });
+    }}
+  >
+    <option value="2 weeks">2 weeks</option>
+    <option value="1 month">1 month</option>
+    <option value="2 months">2 months</option>
+    <option value="3 months">3 months</option>
+    <option value="6 months">6 months</option>
+    <option value="12 months">12 months</option>
+    <option value="permanent">Permanent</option>
+  </Form.Control>
+</Form.Group>
+        </div>
+      </div>
+      <br></br>
+      <div className="row">
+        <div className="col-md-4">
+          <Form.Group>
+            <Form.Label>Size (fr)</Form.Label>
+            <Form.Control
+              type="text"
+              value={newStentData.size}
+              onChange={(e) =>
+                setNewStentData({
+                  ...newStentData,
+                  size: e.target.value,
+                })
+              }
+            />
+          </Form.Group>
+        </div>
+        <div className="col-md-4">
+          <Form.Group>
+            <Form.Label>Length (cm)</Form.Label>
+            <Form.Control
+              type="text"
+              value={newStentData.length}
+              onChange={(e) =>
+                setNewStentData({
+                  ...newStentData,
+                  length: e.target.value,
+                })
+              }
+            />
+          </Form.Group>
+        </div>
+        <div className="col-md-4">
+          <Form.Group>
+            <Form.Label>Stent Type</Form.Label>
+            <Form.Control
+              as="select"
+              name="stentType"
+              value={newStentData.stentType}
+              onChange={handleStentTypeChange}
+            >
+              <option value="polyurethane">Polyurethane</option>
+              <option value="silicon">Silicon</option>
+              <option value="metallic">Metallic</option>
+              <option value="others">Others</option>
+            </Form.Control>
+          </Form.Group>
+        </div>
+      </div>
+   
+      {newStentData.stentType === "others" && (
+        <div className="row">
+          <div className="col-md-12">
+            <Form.Group>
+              <Form.Label>Stent Type (Other)</Form.Label>
+              <Form.Control
+                type="text"
+                name="stentTypeOther"
+                placeholder="Specify the stent type"
+                value={newStentData.stentTypeOther}
+                onChange={handleStentTypeChange}
+              />
+            </Form.Group>
+          </div>
+        </div>
+      )}
+<br></br>
+      <div className="row">
+        <div className="col-md-4">
+          <Form.Group>
+            <Form.Label>Stent Brand</Form.Label>
+            <Form.Control
+              type="text"
+              value={newStentData.stentBrand}
+              onChange={(e) =>
+                setNewStentData({
+                  ...newStentData,
+                  stentBrand: e.target.value,
+                })
+              }
+            />
+          </Form.Group>
+        </div>
+        <div className="col-md-4">
+          <Form.Group>
+            <Form.Label>Place of Insertion</Form.Label>
+            <Form.Control
+              type="text"
+              value={newStentData.placeOfInsertion}
+              onChange={(e) =>
+                setNewStentData({
+                  ...newStentData,
+                  placeOfInsertion: e.target.value,
+                })
+              }
+            />
+          </Form.Group>
+        </div>
+      </div>
+      <br></br>
+      <div className="row">
+        <div className="col-md-12">
+          <Form.Group>
+            <Form.Label>Remarks</Form.Label>
+            <Form.Control
+              type="text"
+              value={newStentData.remarks}
+              onChange={(e) =>
+                setNewStentData({
+                  ...newStentData,
+                  remarks: e.target.value,
+                })
+              }
+            />
+          </Form.Group>
+        </div>
+      </div>
+
+      {/* Add other stent data fields */}
+    </Form>
+  </Modal.Body>
+  <Modal.Footer>
+    <Button variant="secondary" onClick={() => closeReplaceAddStentModal()}>
+      Close
+    </Button>
+    <Button variant="primary" onClick={() => replaceAddStent()}>
+      Add Stent
+    </Button>
+  </Modal.Footer>
+</Modal>
+
 
        {/*Modal for  delete */}
+      
       <Modal
         show={showDeleteModal}
         onHide={() => closeDeleteModal()}
         contentlabel="Delete Stent"
         dialogClassName="custom-modal"
       >
+
         <Modal.Header closeButton>
           <Modal.Title>Delete Stent</Modal.Title>
         </Modal.Header>
@@ -1203,8 +1787,9 @@ function StentDataPage() {
           </Button>
           <Button
             variant="primary"
+          
             onClick={() => {
-              submitDeleteModal(), deleteStent(editStentIndex);
+              submitDeleteModal(),  deleteStent(editStentIndex);
             }}
           >
             Delete Stent

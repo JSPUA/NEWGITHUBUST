@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Navbar, Nav, NavDropdown,Form,Image ,Button,Table,Container,Col,Row} from 'react-bootstrap';
+import { Navbar, Nav, NavDropdown,Form,Image ,Button,Table,Container,Col,Row,Modal,InputGroup} from 'react-bootstrap';
 import axios from 'axios';
 import AnimatedCountdown from "./AnimatedCountdown";
-
+import { MdOutlineDelete, MdOutlineEdit, MdOutlineInfo, MdOutlineSearch, MdOutlineEmail } from 'react-icons/md';
+import { BsInfoCircle, BsSearch } from 'react-icons/bs';
+import { useSelector, useDispatch } from 'react-redux';
 
 function formatDate(isoDate) {
   if (!isoDate) {
@@ -58,10 +60,23 @@ const MainPage = () => {
   const [userData, setUserData] = useState(null);
   const [roleData, setRoleData] = useState(null);
   const [patientRoleData, setPatientRoleData] = useState(null);
-  const { email,icNo } = useParams();
+  const { email } = useParams();
   const [hospitalNames, setHospitalNames] = useState([]);
-  const [selectedHospital, setSelectedHospital] = useState('');
+  const [selectedHospital, setSelectedHospital] = useState('All Hospitals');
   let profileImageSrc = '/images/DefaultProfilePic.jpg';
+  const [filteredPatients, setFilteredPatients] = useState([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [patientToDelete, setPatientToDelete] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [records, setRecords] = useState([]);
+  const [removeRecords, setRemoveRecords] = useState([]);
+  const [replaceRecords, setReplaceRecords] = useState([]);
+  const { icNo, activeTab } = useSelector((state) => state.user);
+
+
+
+
   
   // const{activeTab}=useParams();
   const isPermissionInRole = (permission) => {
@@ -117,6 +132,17 @@ const MainPage = () => {
     }
   };
 
+  const handleResearch = () => {
+    // Check if the user data and hospitalName are available
+    if (userData && userData.hospitalName) {
+      // Navigate to the patient page and pass the hospitalName in the state
+      navigate('/researchList', { state: { hospitalName: userData.hospitalName } });
+    } else {
+      // Handle the case where userData or hospitalName is not available
+      console.error('Error: userData or hospitalName not available');
+    }
+  };
+
   const handleShowApplicationList = () => {
     // Check if the user data and hospitalName are available
     if (userData && userData.hospitalName) {
@@ -130,14 +156,38 @@ const MainPage = () => {
 
   const handleProfileClick = () => {
     // Assuming you want to navigate to the '/profile' route
-    if(location.state.activeTab === 'staff'){
-      navigate('/profileInfo', { state: { icNo: userData.icNo, role: roleData.name,activeTab: location.state.activeTab  } });
+    if(activeTab === 'staff'){
+      navigate('/profileInfo', { state: { icNo: userData.icNo, role: roleData.name,activeTab: activeTab  } });
     }
-    else if(location.state.activeTab === 'patient'){
-      navigate('/profileInfo', { state: { icNo: userData.icNo, role: "patient" ,activeTab: location.state.activeTab} });
+    else if(activeTab === 'patient'){
+      navigate('/profileInfo', { state: { icNo: userData.icNo, role: "patient" ,activeTab: activeTab} });
     }
    
   };
+
+  // const handleHospitalSelect = async (hospital) => {
+  //   setSelectedHospital(hospital);
+  //   try {
+  //     const response = await axios.get(`http://localhost:5555/getPatients`); // Fetch all patients
+  //     const patients = response.data.patients;
+  //     if (hospital === 'All Hospitals') {
+  //       setFilteredPatients(patients); // Set all patients if 'All Hospitals' is selected
+  //     } else {
+  //       const filtered = patients.filter(patient => patient.hospitalName === hospital);
+  //       setFilteredPatients(filtered); // Filter and set patients for the selected hospital
+  //     }
+  //   } catch (error) {
+  //     console.error('Error fetching patients:', error);
+  //   }
+  // };
+  const handleHospitalSelect = async (hospital) => {
+   
+    setSelectedHospital(hospital);
+
+   
+  };
+
+
 
   useEffect(() => {
     const fetchHospitalNames = async () => {
@@ -154,29 +204,59 @@ const MainPage = () => {
    
   }, []);
 
-  const handleHospitalSelect = (hospital) => {
-    setSelectedHospital(hospital);
-  };
-
+  useEffect(() => {
+    const fetchAllPatients = async () => {
+      try {
+        let response;
+        if (selectedHospital === 'All Hospitals') {
+       response = await axios.get('http://localhost:5555/getPatients');
+     
+        // Adjust the endpoint as necessary
+      } else{
+        response = await axios.get(`http://localhost:5555/hospitalsP/${selectedHospital}/patients`);
+      
+      } 
+      
+      if (response && response.data && response.data.patients) {
+        const filtered = filterPatients(response.data.patients, searchTerm, selectedHospital);
+        setFilteredPatients(filtered);
+      }
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+    }
+    };
   
+    fetchAllPatients();
+  }, [searchTerm, selectedHospital]);
+
+
+  const navigateToResearchList = () => {
+    if (userData && userData.hospitalName) {
+      // Navigate to the patient page and pass the hospitalName in the state
+      navigate('/researchList', { state: { hospitalName: userData.hospitalName } });
+    } else {
+      // Handle the case where userData or hospitalName is not available
+      console.error('Error: userData or hospitalName not available');
+    }
+};
 
   useEffect(() => {
     // Fetch additional user data based on the stored token or user information
     const fetchUserData = async () => {
       try {
-        console.log(location.state.icNo);
-        console.log(location.state.activeTab);
+        console.log(icNo);
+        console.log(activeTab);
         
         // You should ideally send the authentication token with the request
         // For simplicity, assuming the server knows the user based on the token
         let endpoint = '';
-        if (location.state.activeTab === 'staff') {
-          endpoint = `http://localhost:5555/getStaffByEmail/${location.state.icNo}`;
-        } else if (location.state.activeTab === 'patient') {
-          endpoint = `http://localhost:5555/getPatientByEmail/${location.state.icNo}`;
+        if (activeTab === 'staff') {
+          endpoint = `http://localhost:5555/getStaffByEmail/${icNo}`;
+        } else if (activeTab === 'patient') {
+          endpoint = `http://localhost:5555/getPatientByEmail/${icNo}`;
         } else {
           // Handle other cases or show an error
-          console.error('Invalid user type:', location.state.activeTab);
+          console.error('Invalid user type:', activeTab);
           // Redirect to login or handle the error as needed
           navigate('/login');
           return;
@@ -187,7 +267,7 @@ const MainPage = () => {
         });
   
 
-        if (location.state.activeTab === 'staff') {
+        if (activeTab === 'staff') {
           setUserData(response.data.staff); // Change from 'user' to 'patient' based on your server response
           const roleResponse = await axios.get(`http://localhost:5555/role/${response.data.staff.position}`);
           setRoleData(roleResponse.data);
@@ -195,7 +275,7 @@ const MainPage = () => {
 
           
         }
-        else if(location.state.activeTab === 'patient'){
+        else if(activeTab === 'patient'){
           setUserData(response.data.patient);
           const patientRoleResponse = await axios.get(`http://localhost:5555/role/patient`);
           setPatientRoleData(patientRoleResponse.data);
@@ -204,7 +284,7 @@ const MainPage = () => {
         
         else {
           // Handle other cases or show an error
-          console.error('Invalid user type:', location.state.activeTab);
+          console.error('Invalid user type:', activeTab);
           // Redirect to login or handle the error as needed
           navigate('/login');
           return;
@@ -221,7 +301,45 @@ const MainPage = () => {
     };
 
     fetchUserData();
-  }, [navigate, icNo]); // Combine both dependencies in a single array
+  }, [navigate, icNo]); 
+  
+  
+  // Combine both dependencies in a single array
+
+  useEffect(() => {
+    if (userData && userData.mrnNo) 
+    axios.get(`http://localhost:5555/stentRecords/${userData.mrnNo}`) // Adjust the URL to your API endpoint
+      .then(response => {
+        setRecords(response.data);
+      })
+      .catch(error => {
+        console.error('There was an error fetching the stent records!', error);
+      });
+  }, [userData]);
+
+
+  useEffect(() => {
+    if (userData && userData.mrnNo) 
+    axios.get(`http://localhost:5555/removedStents/${userData.mrnNo}`) // Adjust the URL to your API endpoint
+      .then(response => {
+        setRemoveRecords(response.data);
+      })
+      .catch(error => {
+        console.error('There was an error fetching the stent records!', error);
+      });
+  }, [userData]);
+
+  useEffect(() => {
+    if (userData && userData.mrnNo) 
+    axios.get(`http://localhost:5555/replaceStents/${userData.mrnNo}`) // Adjust the URL to your API endpoint
+      .then(response => {
+        setReplaceRecords(response.data);
+      })
+      .catch(error => {
+        console.error('There was an error fetching the stent records!', error);
+      });
+  }, [userData]);
+
 
   const calculateDueDate = (insertedDate, dueIn) => {
     if (!insertedDate) {
@@ -264,25 +382,98 @@ const MainPage = () => {
     return formattedDueDate;
   };
 
+  const handleDeleteClick = (patient) => {
+    setPatientToDelete(patient);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = () => {
+    // Implement your delete logic here
+    axios
+      .delete(`http://localhost:5555/deletePatient/${patientToDelete._id}`)
+      .then(() => {
+        setShowSuccessModal(true);
+        setPatients((prevPatients) => prevPatients.filter((p) => p._id !== patientToDelete._id));
+        setShowDeleteModal(false);
+      })
+      .catch((error) => {
+        console.error('Error deleting patient:', error);
+      });
+  };
+
+  const handleCancelDelete = () => {
+    setPatientToDelete(null);
+    setShowDeleteModal(false);
+  };
+
+  const filterPatients = (patients, searchTerm, selectedHospital) => {
+
+
+    return patients.filter((patient) => {
+     
+      const matchesSearchTerm = patient.mrnNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        `${patient.firstName} ${patient.surname}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        formatDate(patient.dob).includes(searchTerm) ||
+        patient.icNo.toString().includes(searchTerm) ||
+        patient.gender.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        patient.mobileNo.toString().includes(searchTerm) ||
+        patient.email.toLowerCase().includes(searchTerm.toLowerCase());
+  
+      // const matchesHospital = selectedHospital === 'All Hospitals' || patient.stentData[0].hospitalName === selectedHospital;
+
+      let matchesHospital = selectedHospital === 'All Hospitals';
+      if (!matchesHospital && patient.stentData && patient.stentData.length > 0) {
+        matchesHospital = patient.stentData.some(stent => stent.hospitalName === selectedHospital);
+      }
+  
+     console.log( matchesHospital);
+      return matchesSearchTerm && matchesHospital;
+    });
+  };
+
+  
   return (
     
     <div>
     
      {userData ? (
         <>
-       { (location.state && location.state.activeTab==="patient")||userData.position==="admin"||userData.position==="doctor" ?(
+       { (activeTab==="patient")||userData.position==="admin"||userData.position==="doctor" ?(
        <>
-        <Navbar bg="light"  expand="lg" >
-                <Navbar.Brand href="#"><Image src="./MML.png" alt="Logo" fluid style={{ width: '100px', height: 'auto' }} /></Navbar.Brand>
+       <Navbar bg="light"  expand="lg" >
+       <Navbar.Brand>
+  <Link to="/mainPage">
+    <Image src="./MML.png" alt="Logo" fluid style={{ width: '100px', height: 'auto' }} />
+  </Link>
+</Navbar.Brand>
                 <Navbar.Toggle aria-controls="basic-navbar-nav" />
                 <Navbar.Collapse id="basic-navbar-nav">
                     <Nav className="mr-auto">
-                        <Nav.Link href="/mainPage">Home</Nav.Link>
+                   
+   
                          {/* Patients Dropdown */}
                          {(isPermissionInRole('addPatient') || isPermissionInRole('viewPatient') || isPermissionInRole('editPatient') || isPermissionInRole('deletePatient')) && (                  
       <NavDropdown title="Patients" id="nav-patients-dropdown">
-        {isPermissionInRole('addPatient') && <NavDropdown.Item href="/addPatient">Add Patients</NavDropdown.Item>}
-        {isPermissionInRole('viewPatient') && <NavDropdown.Item href="/showPatient">View Patients</NavDropdown.Item>}
+      {isPermissionInRole('addPatient') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/addPatient",
+      state: {icNo: icNo, activeTab: "staff", position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      Add Patients
+    </Link>
+  </NavDropdown.Item>
+)}
+       {isPermissionInRole('viewPatient') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/showPatient",
+      state: {icNo: icNo, activeTab: activeTab, position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      View Patients
+    </Link>
+  </NavDropdown.Item>
+)}
         {isPermissionInRole('editPatient') && <NavDropdown.Item href="#">Edit Patients</NavDropdown.Item>}
         {isPermissionInRole('deletePatient') && <NavDropdown.Item href="#">Delete Patients</NavDropdown.Item>}
       </NavDropdown>
@@ -291,25 +482,114 @@ const MainPage = () => {
       {/* Research Dropdown */}
  {(isPermissionInRole('viewResearch') || isPermissionInRole('addResearch') ) && ( 
       <NavDropdown title="Research" id="nav-research-dropdown">
-        {isPermissionInRole('viewResearch') && <NavDropdown.Item href="/researchList">View Research</NavDropdown.Item>}
-        {isPermissionInRole('addResearch') && <NavDropdown.Item href="/uploadPDF">Add Research</NavDropdown.Item>}
+        {isPermissionInRole('viewResearch') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/researchList",
+      state: {icNo: icNo, activeTab: activeTab, position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      View Research
+    </Link>
+  </NavDropdown.Item>
+)}
+    {isPermissionInRole('addResearch') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/uploadPDF",
+      state: {icNo: icNo, activeTab: activeTab, position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      Add Research
+    </Link>
+  </NavDropdown.Item>
+)}
       </NavDropdown>
  )}
 
       {/* Stents Dropdown */}
-      {(isPermissionInRole('viewResearch') || isPermissionInRole('addResearch') ) && ( 
+      {/* {(isPermissionInRole('addStent')  ) && ( 
       <NavDropdown title="Stents" id="nav-stents-dropdown">
+          {isPermissionInRole('addStent') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/",
+      state: {icNo: icNo, activeTab: activeTab, position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      Add Research
+    </Link>
+  </NavDropdown.Item>
+)}
         {isPermissionInRole('addStent') && <NavDropdown.Item href="#">Add Stent</NavDropdown.Item>}
         {isPermissionInRole('myStentRecord') && <NavDropdown.Item href="#">My Stent Record</NavDropdown.Item>}
       </NavDropdown>
-      )}
-
+      )} */}
+      
       {/* Additional Links */}
       {isPermissionInRole('contactDR') && <Nav.Link href="#">Contact DR</Nav.Link>}
       {/* Add other navigation links as needed */}
-    </Nav>
-                       
-                  
+                        {/* Add other navigation links based on permissions */}
+                      
+          {(isPermissionInRole('setRole') ) && (                  
+      <NavDropdown title="Role And Permission" id="nav-patients-dropdown">
+      {isPermissionInRole('setRole') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/rolePermission",
+      state: {icNo: icNo, activeTab: "staff", position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      Role and Permission Setting
+    </Link>
+  </NavDropdown.Item>
+)}
+      
+      </NavDropdown>
+                         )}
+ {(isPermissionInRole('viewDailyReport') || isPermissionInRole('viewSpecificTimeReport')|| isPermissionInRole('viewFurtherReport') ) && ( 
+      <NavDropdown title="Reports" id="nav-research-dropdown">
+        {isPermissionInRole('viewDailyReport') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/dailyCount",
+      state: {icNo: icNo, activeTab: activeTab, position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      View Daily Report
+    </Link>
+  </NavDropdown.Item>
+)}
+    {isPermissionInRole('viewSpecificTimeReport') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/specificDateCount",
+      state: {icNo: icNo, activeTab: activeTab, position: userData.position,hospitalName: userData.hospitalName}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      Specific Time Range Report
+    </Link>
+  </NavDropdown.Item>
+)}
+  {isPermissionInRole('viewFurtherReport') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/chart",
+      state: {icNo: icNo, activeTab: activeTab, position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+    Insertion and Forgotten Report
+    </Link>
+  </NavDropdown.Item>
+)}
+      </NavDropdown>
+ )}
+
+
+      {/* <NavDropdown title={selectedHospital || 'Select Hospital'} id="basic-nav-dropdown">
+                        <NavDropdown.Item key="all-hospitals" onClick={() => handleHospitalSelect('All Hospitals')}>
+    All Hospitals
+  </NavDropdown.Item>
+  {hospitalNames.map((hospital, index) => (
+    <NavDropdown.Item key={index} onClick={() => handleHospitalSelect(hospital)}>
+      {hospital}
+    </NavDropdown.Item>
+  ))}
+          </NavDropdown>                      */}
+                    </Nav>
                     
                 </Navbar.Collapse>
                 
@@ -318,7 +598,7 @@ const MainPage = () => {
         <NavDropdown
           title={
             <img
-            src={`/images/${(location.state.activeTab === 'staff' ? userData.image : userData.profilePic) || 'DefaultProfilePic.jpg'}`}
+            src={`/images/${(activeTab === 'staff' ? userData.image : userData.profilePic) || 'DefaultProfilePic.jpg'}`}
             
             alt='Profile Image'
             style={{
@@ -336,6 +616,7 @@ const MainPage = () => {
           <NavDropdown.Divider />
           <NavDropdown.Item onClick={handleLogout}>Logout</NavDropdown.Item>
         </NavDropdown>
+        
       </Nav>
     </Navbar.Collapse>
             </Navbar>
@@ -351,8 +632,26 @@ const MainPage = () => {
                          {/* Patients Dropdown */}
                          {(isPermissionInRole('addPatient') || isPermissionInRole('viewPatient') || isPermissionInRole('editPatient') || isPermissionInRole('deletePatient')) && (                  
       <NavDropdown title="Patients" id="nav-patients-dropdown">
-        {isPermissionInRole('addPatient') && <NavDropdown.Item href="/addPatient">Add Patients</NavDropdown.Item>}
-        {isPermissionInRole('viewPatient') && <NavDropdown.Item href="/showPatient">View Patients</NavDropdown.Item>}
+      {isPermissionInRole('addPatient') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/addPatient",
+      state: {icNo: icNo, activeTab: "staff", position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      Add Patients
+    </Link>
+  </NavDropdown.Item>
+)}
+       {isPermissionInRole('viewPatient') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/showPatient",
+      state: {icNo: icNo, activeTab: activeTab, position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      View Patients
+    </Link>
+  </NavDropdown.Item>
+)}
         {isPermissionInRole('editPatient') && <NavDropdown.Item href="#">Edit Patients</NavDropdown.Item>}
         {isPermissionInRole('deletePatient') && <NavDropdown.Item href="#">Delete Patients</NavDropdown.Item>}
       </NavDropdown>
@@ -361,8 +660,26 @@ const MainPage = () => {
       {/* Research Dropdown */}
  {(isPermissionInRole('viewResearch') || isPermissionInRole('addResearch') ) && ( 
       <NavDropdown title="Research" id="nav-research-dropdown">
-        {isPermissionInRole('viewResearch') && <NavDropdown.Item href="/researchList">View Research</NavDropdown.Item>}
-        {isPermissionInRole('addResearch') && <NavDropdown.Item href="/uploadPDF">Add Research</NavDropdown.Item>}
+        {isPermissionInRole('viewResearch') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/researchList",
+      state: {icNo: icNo, activeTab: activeTab, position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      View Research
+    </Link>
+  </NavDropdown.Item>
+)}
+       {isPermissionInRole('addResearch') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/uploadPDF",
+      state: {icNo: icNo, activeTab: activeTab, position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      Add Research
+    </Link>
+  </NavDropdown.Item>
+)}
       </NavDropdown>
  )}
 
@@ -388,6 +705,56 @@ const MainPage = () => {
     </NavDropdown.Item>
   ))}
           </NavDropdown>
+          {(isPermissionInRole('setRole') ) && (                  
+      <NavDropdown title="Role And Permission" id="nav-patients-dropdown">
+      {isPermissionInRole('setRole') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/rolePermission",
+      state: {icNo: icNo, activeTab: "staff", position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      Role and Permission Setting
+    </Link>
+  </NavDropdown.Item>
+)}
+      
+      </NavDropdown>
+                         )}
+
+{(isPermissionInRole('viewDailyReport') || isPermissionInRole('viewSpecificTimeReport')|| isPermissionInRole('viewFurtherReport') ) && ( 
+      <NavDropdown title="Reports" id="nav-research-dropdown">
+        {isPermissionInRole('viewDailyReport') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/dailyCount",
+      state: {icNo: icNo, activeTab: activeTab, position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      View Daily Report
+    </Link>
+  </NavDropdown.Item>
+)}
+    {isPermissionInRole('viewSpecificTimeReport') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/specificDateCount",
+      state: {icNo: icNo, activeTab: activeTab, position: userData.position,hospitalName: userData.hospitalName}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+      Specific Time Range Report
+    </Link>
+  </NavDropdown.Item>
+)}
+  {isPermissionInRole('viewSpecificTimeReport') && (
+  <NavDropdown.Item as="div">
+    <Link to={{
+      pathname: "/chart",
+      state: {icNo: icNo, activeTab: activeTab, position: userData.position}
+    }} style={{ textDecoration: 'none', color: 'inherit' }}>
+    Insertion and Forgotten Report
+    </Link>
+  </NavDropdown.Item>
+)}
+      </NavDropdown>
+ )}              
                     </Nav>
                     
                 </Navbar.Collapse>
@@ -397,7 +764,7 @@ const MainPage = () => {
         <NavDropdown
           title={
             <img
-            src={`/images/${(location.state.activeTab === 'staff' ? userData.image : userData.profilePic) || 'DefaultProfilePic.jpg'}`}
+            src={`/images/${(activeTab === 'staff' ? userData.image : userData.profilePic) || 'DefaultProfilePic.jpg'}`}
             
             alt='Profile Image'
             style={{
@@ -444,7 +811,7 @@ const MainPage = () => {
    
     {userData ? (
       <>
-        {location.state && location.state.activeTab === 'patient' ? (
+        {activeTab === 'patient' ? (
           // Content for patient
           <>
            {userData && (
@@ -560,7 +927,113 @@ const MainPage = () => {
         </tr>
        
       </tbody>
-    </Table>    
+    </Table> 
+    <div> <div>
+      <h2>Stent Records</h2>
+      <Table striped bordered hover responsive >
+        <thead>
+          <tr>
+           <th>No</th>
+            <th>Case ID</th>
+            <th>Hospital Name</th>
+            <th>Laterality</th>
+            <th>Inserted Date</th>
+            <th>Duration</th>
+            {/* Add more headers based on the data */}
+          </tr>
+        </thead>
+        <tbody>
+        {records.map((record, index) => {
+      // Sort stentData by insertedDate in descending order
+     
+      return (
+        <tr key={record._id}>
+          <td>{index + 1}</td>
+          <td>{record.stentData.map(stent => stent.caseId).join(', ')}</td>
+          <td>{record.stentData.map(stent => stent.hospitalName).join(', ')}</td>
+          <td>{record.stentData.map(stent => stent.laterality).join(', ')}</td>
+          <td>{record.stentData.map(stent => formatDate(stent.insertedDate)).join(', ')}</td>
+          <td>{record.stentData.map(stent => stent.dueDate).join(', ')}</td>
+          {/* Add more data cells based on the data */}
+        </tr>
+      );
+    })}
+        </tbody>
+      </Table>
+    </div></div>
+
+    <div> <div>
+      <h2>Remove Stent Records</h2>
+      <Table striped bordered hover responsive >
+        <thead>
+          <tr>
+           <th>No</th>
+            <th>Case ID</th>
+            <th>Hospital Name</th>
+            <th>Laterality</th>
+            <th>Remove by</th>
+            <th>Removal Date</th>
+            {/* Add more headers based on the data */}
+          </tr>
+        </thead>
+        <tbody>
+        {removeRecords.map((record, index) => {
+      // Sort stentData by insertedDate in descending order
+     
+      return (
+        <tr key={record._id}>
+          <td>{index + 1}</td>
+          <td>{record.caseId}</td>
+          <td>{record.removalLocation}</td>
+          <td>{record.laterality}</td>
+          <td>{record.removedBy}</td>
+          
+          <td>{formatDate(record.timestamp)}</td>
+          {/* Add more data cells based on the data */}
+        </tr>
+      );
+    })}
+        </tbody>
+      </Table>
+    </div></div>
+
+    <div> <div>
+      <h2>Replace Stent Records</h2>
+      <Table striped bordered hover responsive >
+        <thead>
+          <tr>
+           <th>No</th>
+            <th>Old Case ID</th>
+            <th>New Case ID</th>
+            <th>Hospital Name</th>
+            <th>Laterality</th>
+            <th>Remove by</th>
+            <th>Removal Date</th>
+            {/* Add more headers based on the data */}
+          </tr>
+        </thead>
+        <tbody>
+        {replaceRecords.map((record, index) => {
+      // Sort stentData by insertedDate in descending order
+     
+      return (
+        <tr key={record._id}>
+          <td>{index + 1}</td>
+          <td>{record.removedStent.caseId}</td>
+          <td>{record.newStent.caseId}</td>
+          <td>{record.removedStent.removalLocation}</td>
+          <td>{record.removedStent.laterality}</td>
+          <td>{record.removedStent.removedBy}</td>
+          
+          
+          <td>{formatDate(record.timestamp)}</td>
+          {/* Add more data cells based on the data */}
+        </tr>
+      );
+    })}
+        </tbody>
+      </Table>
+    </div></div>   
     </Container> 
                     {/* Add more stent data fields as needed */}
                   </div>
@@ -573,7 +1046,7 @@ const MainPage = () => {
 
           
           </>
-        ) : location.state && location.state.activeTab === 'staff' ? (
+        ) : activeTab === 'staff' ? (
           // Content for staff
           <>
          
@@ -634,14 +1107,155 @@ const MainPage = () => {
               <Button variant='primary' onClick={handleShowApplicationList}>Show Application List</Button>
               {/* Other admin-specific content */}
             </>
-          )}
+          )}n
     
           {userData.position === 'superAdmin' && (
             // Content for superAdmin
             <>
+            <Container>
+            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+  <h1 className="left-align">Hi {userData && (userData.firstName + userData.surname + ",")}</h1>
+  </div>
+  </Container>
               <Button variant='primary' onClick={handleShowPatientList}>Show Patient List</Button>
               <Button variant='primary' onClick={handleShowUserList}>Show User List</Button>
-              {/* Other superAdmin-specific content */}
+              <Button variant='primary' onClick={handleResearch}>Research User List</Button>
+<Container>
+<Row className="mt-3 mb-3">
+
+          <Col md={3}>
+            <h1>PATIENT LIST</h1>
+           
+          </Col>
+          <Col md={5}>
+            
+           
+          </Col>
+          <Col md={4} className="d-flex justify-content-end">
+            <InputGroup className="mb-3">
+              <Form.Control
+                type="text"
+                placeholder="Search by criteria..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <InputGroup.Text>
+                <BsSearch />
+              </InputGroup.Text>
+            </InputGroup>
+          </Col>
+        </Row>
+ 
+              <Table striped bordered hover responsive>
+  <thead>
+    <tr>
+    <th>NO</th>
+      <th>MRN NO</th>
+    
+      <th>Name</th>
+      <th>Birthday</th>
+      <th>IC NO</th>
+      <th>Gender</th>
+      <th>Mobile NO</th>
+      <th>No of stent(s)</th>
+      <th>Opearations</th>
+      {/* Add more headers as needed */}
+    </tr>
+  </thead>
+  <tbody>
+    {filteredPatients.map((patients, index) => (
+     
+      <tr key={index}>
+        <td>{index + 1}</td>
+        <td>{patients.mrnNo}</td>
+        <td>{patients.firstName}{patients.surname}</td>
+        <td>{formatDate(patients.dob)}</td>
+        <td>{patients.icNo}</td>
+        <td>{patients.gender}</td>
+        <td>{patients.mobileNo}</td>
+        <td>{patients.stentData.length}</td>
+        <td className="text-center">
+                  
+                  <Link  to={`/showStent/${patients._id}`}>
+                  <Button variant='primary'> Show Stent</Button> 
+                  </Link>
+                  <Link  to={`/showPatientByID/${patients._id}`}>
+                    <Button variant="light" className="transparent-button">
+                      <MdOutlineSearch className="blue-icon icon-large" />
+                    </Button>
+                  </Link>
+                  <Button
+                    variant="light"
+                    className="transparent-button"
+                    onClick={() => handleEditClick(patients)}
+                  >
+                    <MdOutlineEmail className="brown-icon icon-large" />
+                  </Button>
+                  <Link  to={`/updatePatientByID/${patients._id}`}>
+                  <Button
+                    variant="light"
+                    className="transparent-button"
+                    
+                  >
+                    <MdOutlineEdit className="black-icon icon-large" />
+                  </Button>
+                  </Link>
+                  <Button
+                    variant="light"
+                    className="transparent-button"
+                    onClick={() => handleDeleteClick(patients)}
+                  >
+                    <MdOutlineDelete className="red-icon icon-large" />
+                  </Button>
+                </td>
+        {/* Add more patient data as needed */}
+      </tr>
+    ))}
+  </tbody>
+</Table>
+<div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+  <Link to="/addPatient">
+    <Button>
+      <h5>+</h5>
+    </Button>
+  </Link>
+</div>
+<br></br>
+</Container>
+
+<Modal show={showDeleteModal} onHide={handleCancelDelete}>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirm Delete</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {patientToDelete && (
+            <p>Are you sure you want to delete {patientToDelete.firstName} {patientToDelete.surname}?</p>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleCancelDelete}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleConfirmDelete}>
+            Delete
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal show={showSuccessModal} onHide={() => setShowSuccessModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Success</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>Patient deleted successfully.</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="primary" onClick={() => setShowSuccessModal(false)}>
+            OK
+          </Button>
+        </Modal.Footer>
+      </Modal>            {/* Other superAdmin-specific content */}
             </>
           )}
     

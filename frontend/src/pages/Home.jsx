@@ -281,6 +281,9 @@ const Home = () => {
 <Link  to={`/rolePermission`}><Button variant="primary"> Role and Permission</Button></Link>
 <Link  to={`/hospitalList`}><Button variant="primary"> Hospital List</Button></Link>
 <Link  to={`/superAdmin`}><Button variant="primary"> Super Admin </Button></Link>
+<Link  to={`/chart`}><Button variant="primary"> Chart </Button></Link>
+<Link  to={`/dailyCount`}><Button variant="primary"> DailyChart </Button></Link>
+<Link  to={`/specificDateCount`}><Button variant="primary"> SpecificTimeChart </Button></Link>
 {/* <Link  to={`/addStent`}><Button variant="primary">Add Stent</Button></Link>
 <Link  to={`/showStent`}><Button variant="primary">Show Stent</Button></Link>
 <Link  to={`/combine`}><Button variant="primary">Combine</Button></Link>
