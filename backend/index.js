@@ -87,7 +87,7 @@ app.listen(PORT, () => {
     }
   });
 
-  cron.schedule("* * * * *", async () => {
+  cron.schedule("11 23 * * *", async () => {
     try {
       const result = await checkStentsAndSendSMS();
       console.log(result);
