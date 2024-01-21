@@ -12,6 +12,7 @@ const patientSchema = new mongoose.Schema({
   mobileNo: String,
   email: String,
   ethnicity: String,
+  hospitalName: String,
   password: String,
   profilePic: String,
   otp: String,

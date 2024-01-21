@@ -23,13 +23,13 @@ import Modal from "react-bootstrap/Modal";
 import Button from "react-bootstrap/Button";
 
 function AddPatient() {
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [retypePassword, setRetypePassword] = useState("");
-  const [passwordsMatch, setPasswordsMatch] = useState("");
-  const [showPasswordMismatchModal, setShowPasswordMismatchModal] =
-    useState(false);
-  const saltRounds = 10;
+  // const [password, setPassword] = useState("");
+  // const [showPassword, setShowPassword] = useState(false);
+  // const [retypePassword, setRetypePassword] = useState("");
+  // const [passwordsMatch, setPasswordsMatch] = useState("");
+  // const [showPasswordMismatchModal, setShowPasswordMismatchModal] =
+  //   useState(false);
+  // const saltRounds = 10;
   const [lastMrnNo, setLastMrnNo] = useState(0);
   const [formData, setFormData] = useState({
     // ... your form data fields
@@ -52,6 +52,7 @@ function AddPatient() {
   const [otp, setOtp] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [verified, setVerified] = useState(false);
+  const [error, setError] = useState(null);
 
   let profileImageSrc = "/images/DefaultProfilePic.jpg";
 
@@ -178,13 +179,13 @@ function AddPatient() {
   }, []);
 
   const sendOTP = async (e) => {
-    validatePasswords();
+    // validatePasswords();
 
-    if (!passwordsMatch) {
-      // Passwords don't match, show the password mismatch modal
-      setShowPasswordMismatchModal(true);
-      return;
-    }
+    // if (!passwordsMatch) {
+    //   // Passwords don't match, show the password mismatch modal
+    //   setShowPasswordMismatchModal(true);
+    //   return;
+    // }
 
     const patientData = {
       firstName: formData.firstName,
@@ -195,12 +196,11 @@ function AddPatient() {
       mrnNo: formData.mrnNo,
       mobileNo: mobile,
       email: formData.email,
-      nextOfKin: {
-        firstName: formData.nextOfKinFirstName,
-        surname: formData.nextOfKinSurname,
-        mobileNo: formData.nextOfKinMobileNo,
-      },
-      password: password,
+      hospitalName: formData.hospital,
+      nextOfKinFirstName: formData.nextOfKinFirstName,
+      nextOfKinSurname: formData.nextOfKinSurname,
+      nextOfKinMobileNo: formData.nextOfKinMobileNo,
+      password: formData.icNo,
       verified: false,
     };
 
@@ -214,18 +214,24 @@ function AddPatient() {
     const json = await registration.json();
     console.log(json);
 
-    const response = fetch("http://localhost:5555/api/sms", {
-      method: "POST",
-      body: JSON.stringify({ mobileNo: mobile }),
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    if (!registration.ok) {
+      setError(json.message);
+    }
 
-    console.log("mobile", mobile);
-    setIsOtpSent(true);
-    setShowModal(true);
-    console.log("OTP sent", response.data);
+    if (registration.ok) {
+      const response = fetch("http://localhost:5555/api/sms", {
+        method: "POST",
+        body: JSON.stringify({ mobileNo: mobile }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      console.log("mobile", mobile);
+      setIsOtpSent(true);
+      setShowModal(true);
+      console.log("OTP sent", response.data);
+    }
   };
 
   const handleVerifyOtp = async () => {
@@ -272,6 +278,7 @@ function AddPatient() {
           mrnNo: "",
           mobileNo: "",
           email: "",
+          hospitalName: "",
           nextOfKinName: "",
           nextOfKinContact: "",
           ethnicity: "",
@@ -299,6 +306,7 @@ function AddPatient() {
 
   const submitPatient = async (e) => {
     e.preventDefault();
+
     sendOTP();
     // validatePasswords();
 
@@ -325,13 +333,13 @@ function AddPatient() {
     // }
   };
 
-  const handleTogglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
-  };
+  // const handleTogglePasswordVisibility = () => {
+  //   setShowPassword(!showPassword);
+  // };
 
-  const validatePasswords = () => {
-    setPasswordsMatch(formData.password === retypePassword);
-  };
+  // const validatePasswords = () => {
+  //   setPasswordsMatch(formData.password === retypePassword);
+  // };
 
   const handleInputChange = (event) => {
     const { name, value } = event.target;
@@ -346,21 +354,21 @@ function AddPatient() {
     setShowSuccessModal(false);
   };
 
-  const handleClosePasswordMismatchModal = () => {
-    setShowPasswordMismatchModal(false);
-  };
+  // const handleClosePasswordMismatchModal = () => {
+  //   setShowPasswordMismatchModal(false);
+  // };
 
-  const handlePasswordChange = (event) => {
-    setPassword(event.target.value);
-    // Check if passwords match when the password field changes
-    setPasswordsMatch(event.target.value === retypePassword);
-  };
+  // const handlePasswordChange = (event) => {
+  //   setPassword(event.target.value);
+  //   // Check if passwords match when the password field changes
+  //   setPasswordsMatch(event.target.value === retypePassword);
+  // };
 
-  const handleRetypePasswordChange = (event) => {
-    setRetypePassword(event.target.value);
-    // Check if passwords match when the retype password field changes
-    setPasswordsMatch(password === event.target.value);
-  };
+  // const handleRetypePasswordChange = (event) => {
+  //   setRetypePassword(event.target.value);
+  //   // Check if passwords match when the retype password field changes
+  //   setPasswordsMatch(password === event.target.value);
+  // };
 
   return (
     <div>
@@ -723,7 +731,7 @@ function AddPatient() {
         >
           <Card.Header className="d-flex justify-content-between align-items-center">
             <div>
-              <Link to="/login">
+              <Link to="/mainPage">
                 <FontAwesomeIcon icon={faAngleLeft} />
               </Link>{" "}
               Back
@@ -746,7 +754,7 @@ function AddPatient() {
                   <div className="col-md-4">
                     {/* Include form fields for patient information */}
                     <div className="form-group">
-                      <label>First Name:</label>
+                      <label>First Name*:</label>
                       <input
                         type="text"
                         placeholder="Enter First Name"
@@ -759,7 +767,7 @@ function AddPatient() {
                   </div>
                   <div className="col-md-4">
                     <div className="form-group">
-                      <label>Surname:</label>
+                      <label>Surname*:</label>
                       <input
                         type="text"
                         placeholder="Enter Surname"
@@ -772,7 +780,7 @@ function AddPatient() {
                   </div>
                   <div className="col-md-4">
                     <div className="form-group">
-                      <label>Date of Birth:</label>
+                      <label>Date of Birth*:</label>
                       <input
                         type="Date"
                         placeholder="Enter Date of Birth"
@@ -788,7 +796,7 @@ function AddPatient() {
                 <div className="row">
                   <div className="col-md-4">
                     <div className="form-group">
-                      <label>MRN No:</label>
+                      <label>MRN No*:</label>
                       <input
                         type="number"
                         placeholder="Enter MRN No"
@@ -801,7 +809,7 @@ function AddPatient() {
                   </div>
                   <div className="col-md-4">
                     <div className="form-group">
-                      <label>IC No:</label>
+                      <label>IC No*:</label>
                       <input
                         type="number"
                         placeholder="Enter IC No"
@@ -814,7 +822,7 @@ function AddPatient() {
                   </div>
                   <div className="col-md-4">
                     <div className="form-group">
-                      <label>Gender</label>
+                      <label>Gender*</label>
                       <select
                         name="gender"
                         value={formData.gender}
@@ -832,7 +840,7 @@ function AddPatient() {
                 <div className="row">
                   <div className="col-md-4">
                     <div className="form-group">
-                      <label>Mobile No:</label>
+                      <label>Mobile No*:</label>
                       <input
                         type="text"
                         placeholder="Enter Mobile No"
@@ -848,7 +856,7 @@ function AddPatient() {
                   </div>
                   <div className="col-md-4">
                     <div className="form-group">
-                      <label>Email:</label>
+                      <label>Email*:</label>
                       <input
                         type="email"
                         placeholder="Enter Email"
@@ -861,7 +869,7 @@ function AddPatient() {
                   </div>
                   <div className="col-md-4">
                     <div className="form-group">
-                      <label>Ethnicity:</label>
+                      <label>Ethnicity*:</label>
                       <input
                         type="text"
                         placeholder="Enter Ethnicity"
@@ -877,7 +885,7 @@ function AddPatient() {
                 <div className="row">
                   <div className="col-md-4">
                     <div className="form-group">
-                      <label>Hospital</label>
+                      <label>Hospital*</label>
                       <select
                         name="hospital"
                         value={formData.hospital}
@@ -892,61 +900,13 @@ function AddPatient() {
                   </div>
                 </div>
                 <br></br>
-                <div className="row">
-                  <div className="col-md-4">
-                    <div className="form-group">
-                      <label>Password:</label>
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Enter password"
-                        name="password"
-                        value={formData.password}
-                        onChange={handlePasswordChange}
-                        className="form-control"
-                        required
-                      />
-                      <div className="input-group-append">
-                        <Button
-                          variant="outline-secondary"
-                          type="button"
-                          onClick={handleTogglePasswordVisibility}
-                        >
-                          <FontAwesomeIcon
-                            icon={showPassword ? faEye : faEyeSlash}
-                          />{" "}
-                          Show Password
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-4">
-                    <div className="form-group">
-                      <label>Retype Password:</label>
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        name="retypePassword"
-                        placeholder="Retype password"
-                        value={retypePassword}
-                        onChange={handleRetypePasswordChange}
-                        className="form-control"
-                        required
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  {passwordsMatch ? (
-                    <p>Passwords match.</p>
-                  ) : (
-                    <p>Passwords do not match.</p>
-                  )}
-                </div>
+
                 <hr />
                 <h3>Next Of Kin's Biodata</h3>
                 <div className="row">
                   <div className="col-md-4">
                     <div className="form-group">
-                      <label>Next of Kin First Name:</label>
+                      <label>Next of Kin First Name*:</label>
                       <input
                         type="text"
                         placeholder="Enter Next of Kin First Name"
@@ -959,7 +919,7 @@ function AddPatient() {
                   </div>
                   <div className="col-md-4">
                     <div className="form-group">
-                      <label>Next of Kin Surname:</label>
+                      <label>Next of Kin Surname*:</label>
                       <input
                         type="text"
                         placeholder="Enter Next of Kin Surname"
@@ -972,7 +932,7 @@ function AddPatient() {
                   </div>
                   <div className="col-md-4">
                     <div className="form-group">
-                      <label>Next of Kin Mobile No:</label>
+                      <label>Next of Kin Mobile No*:</label>
                       <input
                         type="number"
                         placeholder="Enter Next of Kin Mobile No"
@@ -985,6 +945,7 @@ function AddPatient() {
                   </div>
                 </div>
                 <br></br>
+                <div style={{ color: "red", pading: "5px" }}>{error}</div>
                 {/* Add a submit button */}
                 <div className="d-flex justify-content-end">
                   <button type="submit" className="btn btn-primary">
@@ -1044,7 +1005,7 @@ function AddPatient() {
                   </Button>
                 </Modal.Footer>
               </Modal>
-              <Modal
+              {/* <Modal
                 show={showPasswordMismatchModal}
                 onHide={handleClosePasswordMismatchModal}
               >
@@ -1073,7 +1034,7 @@ function AddPatient() {
                     Close
                   </Button>
                 </Modal.Footer>
-              </Modal>
+              </Modal> */}
             </div>
           </div>
         </Card>

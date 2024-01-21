@@ -1055,6 +1055,7 @@ app.post("/addPatients", async (req, res) => {
     mobileNo,
     email,
     ethnicity,
+    hospitalName,
     password,
     otp,
     verified,
@@ -1078,6 +1079,7 @@ app.post("/addPatients", async (req, res) => {
       mobileNo: "+6" + mobileNo,
       email,
       ethnicity,
+      hospitalName,
       otp,
       verified,
       password: hashedPassword, // Store the hashed password
@@ -1092,7 +1094,7 @@ app.post("/addPatients", async (req, res) => {
     res.json({ patient: savedPatient });
   } catch (err) {
     console.log(err.message);
-    res.status(400).send({ message: err.message });
+    res.status(400).send({ message: "Please fill in all required fill!" });
   }
 });
 
